@@ -226,8 +226,20 @@ class TestRAG:
         """Test context builder."""
         from app.rag.retriever import build_context
         docs = [
-            {"text": "Pour créer une SARL, il faut...", "title": "Guide SARL", "source": "test.pdf", "category": "startup", "score": 0.9},
-            {"text": "La CNSS exige...", "title": "Guide CNSS", "source": "cnss.pdf", "category": "cnss", "score": 0.8},
+            {
+                "text": "Pour créer une SARL, il faut...",
+                "title": "Guide SARL",
+                "source": "test.pdf",
+                "category": "startup",
+                "score": 0.9,
+            },
+            {
+                "text": "La CNSS exige...",
+                "title": "Guide CNSS",
+                "source": "cnss.pdf",
+                "category": "cnss",
+                "score": 0.8,
+            },
         ]
         ctx = build_context(docs, max_chars=5000)
         assert "Guide SARL" in ctx

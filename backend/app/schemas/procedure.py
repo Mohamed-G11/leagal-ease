@@ -5,14 +5,14 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class StepStatus(str, Enum):
+class StepStatus(str, Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     pending = "pending"
     in_progress = "in_progress"
     completed = "completed"
     blocked = "blocked"
 
 
-class NotificationType(str, Enum):
+class NotificationType(str, Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     deadline_3days = "deadline_3days"
     deadline_today = "deadline_today"
     deadline_passed = "deadline_passed"

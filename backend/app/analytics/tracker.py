@@ -35,7 +35,7 @@ def log_query(
 def get_overview(db: Session) -> dict:
     """General stats — adapted from colleague's get_overview()."""
     total    = db.query(func.count(AIQueryLog.id)).scalar() or 0
-    answered = db.query(func.count(AIQueryLog.id)).filter(AIQueryLog.answered == True).scalar() or 0
+    answered = db.query(func.count(AIQueryLog.id)).filter(AIQueryLog.answered.is_(True)).scalar() or 0
 
     return {
         "total_queries":      total,
@@ -111,7 +111,7 @@ def get_unanswered_queries(db: Session, limit: int = 20) -> list:
     """Queries the RAG couldn't answer — useful to detect dataset gaps."""
     rows = (
         db.query(AIQueryLog)
-        .filter(AIQueryLog.answered == False)
+        .filter(AIQueryLog.answered.is_(False))
         .order_by(desc(AIQueryLog.created_at))
         .limit(limit)
         .all()

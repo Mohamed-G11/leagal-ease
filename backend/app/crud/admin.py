@@ -44,8 +44,10 @@ def _month_label(dt: datetime) -> str:
 
 
 def _doc_label(ct: str) -> str:
-    if ct == 'application/pdf':                                          return 'PDF'
-    if ct in ('image/png','image/jpeg','image/jpg','image/webp'):       return 'Image'
+    if ct == 'application/pdf':
+        return 'PDF'
+    if ct in ('image/png','image/jpeg','image/jpg','image/webp'):
+        return 'Image'
     if ct in ('application/msword',
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'):
                                                                          return 'Word'
@@ -87,10 +89,12 @@ def create_procedure_type(db: Session, data: AdminProcedureTypeCreate) -> Proced
         name=data.name, description=data.description,
         icon=data.icon, estimated_days=data.estimated_days,
     )
-    db.add(pt); db.flush()
+    db.add(pt)
+    db.flush()
     for s in steps_data:
         db.add(ProcedureStep(procedure_type_id=pt.id, **s.model_dump()))
-    db.commit(); db.refresh(pt)
+    db.commit()
+    db.refresh(pt)
     return pt
 
 
@@ -100,7 +104,8 @@ def update_procedure_type(db: Session, type_id: int, data: AdminProcedureTypeUpd
         return None
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(pt, field, value)
-    db.commit(); db.refresh(pt)
+    db.commit()
+    db.refresh(pt)
     return pt
 
 
@@ -108,7 +113,8 @@ def delete_procedure_type(db: Session, type_id: int) -> bool:
     pt = db.query(ProcedureType).filter(ProcedureType.id == type_id).first()
     if not pt:
         return False
-    db.delete(pt); db.commit()
+    db.delete(pt)
+    db.commit()
     return True
 
 
@@ -116,7 +122,9 @@ def add_step(db: Session, type_id: int, data: AdminStepCreate) -> ProcedureStep 
     if not db.query(ProcedureType).filter(ProcedureType.id == type_id).first():
         return None
     step = ProcedureStep(procedure_type_id=type_id, **data.model_dump())
-    db.add(step); db.commit(); db.refresh(step)
+    db.add(step)
+    db.commit()
+    db.refresh(step)
     return step
 
 
@@ -126,7 +134,8 @@ def update_step(db: Session, step_id: int, data: AdminStepUpdate) -> ProcedureSt
         return None
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(step, field, value)
-    db.commit(); db.refresh(step)
+    db.commit()
+    db.refresh(step)
     return step
 
 
@@ -134,7 +143,8 @@ def delete_step(db: Session, step_id: int) -> bool:
     step = db.query(ProcedureStep).filter(ProcedureStep.id == step_id).first()
     if not step:
         return False
-    db.delete(step); db.commit()
+    db.delete(step)
+    db.commit()
     return True
 
 
@@ -182,10 +192,14 @@ def _compute_funnels(db: Session) -> list[StepFunnelItem]:
                 'pending': 0, 'in_progress': 0,
             }
         agg[sid]['total'] += 1
-        if progress.status == StepStatus.completed:   agg[sid]['completed']   += 1
-        elif progress.status == StepStatus.blocked:   agg[sid]['blocked']     += 1
-        elif progress.status == StepStatus.pending:   agg[sid]['pending']     += 1
-        elif progress.status == StepStatus.in_progress: agg[sid]['in_progress'] += 1
+        if progress.status == StepStatus.completed:
+            agg[sid]['completed']   += 1
+        elif progress.status == StepStatus.blocked:
+            agg[sid]['blocked']     += 1
+        elif progress.status == StepStatus.pending:
+            agg[sid]['pending']     += 1
+        elif progress.status == StepStatus.in_progress:
+            agg[sid]['in_progress'] += 1
 
     result = []
     for item in sorted(agg.values(), key=lambda x: x['step_order']):
@@ -229,7 +243,7 @@ def _compute_doc_stats(db: Session) -> list[DocumentTypeStat]:
 # ── BI: top users ─────────────────────────────────────────────────────────────
 
 def _compute_top_users(db: Session, limit: int = 8) -> list[UserActivityStat]:
-    users = db.query(User).filter(User.is_active == True).all()
+    users = db.query(User).filter(User.is_active.is_(True)).all()
     stats = []
     for u in users:
         procs = db.query(UserProcedure).filter(UserProcedure.user_id == u.id).all()
@@ -303,7 +317,7 @@ def _compute_status_distribution(db: Session) -> StatusDistribution:
 def get_global_stats(db: Session) -> GlobalStats:
     # ── KPIs ──
     total_users          = db.query(func.count(User.id)).scalar() or 0
-    active_users         = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
+    active_users         = db.query(func.count(User.id)).filter(User.is_active.is_(True)).scalar() or 0
     total_procedures     = db.query(func.count(UserProcedure.id)).scalar() or 0
     completed_procedures = (
         db.query(func.count(UserProcedure.id))
@@ -378,8 +392,10 @@ def get_global_stats(db: Session) -> GlobalStats:
                 agg[step.id] = {'step_title': step.title, 'procedure_type': proc_type.name,
                                 'total': 0, 'completed': 0, 'blocked': 0}
             agg[step.id]['total'] += 1
-            if progress.status == StepStatus.completed: agg[step.id]['completed'] += 1
-            elif progress.status == StepStatus.blocked:  agg[step.id]['blocked']   += 1
+            if progress.status == StepStatus.completed:
+                agg[step.id]['completed'] += 1
+            elif progress.status == StepStatus.blocked:
+                agg[step.id]['blocked']   += 1
 
         top5 = sorted(agg.values(), key=lambda x: x['blocked'], reverse=True)[:5]
         most_blocked = [StepStat(**s) for s in top5]

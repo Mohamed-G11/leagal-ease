@@ -108,7 +108,10 @@ def invite_collaborator(
     """Invite a registered user to collaborate on a procedure."""
     # Validate role
     if req.role not in ROLES or req.role == "owner":
-        raise HTTPException(status_code=422, detail=f"Invalid role. Choose from: {', '.join(k for k in ROLES if k != 'owner')}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role. Choose from: {', '.join(k for k in ROLES if k != 'owner')}",
+        )
 
     # Check caller is owner
     check_owner(db, req.procedure_id, current_user.id)
@@ -211,7 +214,10 @@ def my_collaborations(
         {
             "collaboration_id": c.id,
             "procedure_id":     c.procedure_id,
-            "procedure_title":  c.procedure.title or (c.procedure.procedure_type.name if c.procedure and c.procedure.procedure_type else ""),
+            "procedure_title":  (
+                c.procedure.title
+                or (c.procedure.procedure_type.name if c.procedure and c.procedure.procedure_type else "")
+            ),
             "role":             c.role,
             "role_label":       ROLES.get(c.role, {}).get("label", c.role),
             "owner_username":   c.procedure.user.username if c.procedure and c.procedure.user else "",

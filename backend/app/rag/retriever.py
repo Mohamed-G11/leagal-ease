@@ -108,6 +108,7 @@ def retrieve(question: str, lang: str = "auto", top_k: int = 5) -> list:
         results["documents"][0],
         results["metadatas"][0],
         results["distances"][0],
+        strict=False,
     ):
         # Convert cosine distance to similarity score (0→1)
         score = round(1 - dist, 4)

@@ -41,7 +41,7 @@ def _load_procedure(q):
 def get_user_procedures(db: Session, user_id: int) -> list[UserProcedure]:
     return (
         _load_procedure(db.query(UserProcedure))
-        .filter(UserProcedure.user_id == user_id, UserProcedure.is_active == True)
+        .filter(UserProcedure.user_id == user_id, UserProcedure.is_active.is_(True))
         .order_by(UserProcedure.started_at.desc())
         .all()
     )

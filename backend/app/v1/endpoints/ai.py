@@ -113,7 +113,8 @@ FEW_SHOT = {
     "darija": """
 === أمثلة على الدارجة التونسية الصحيحة ===
 مثال 1:
-السياق: "Pour créer une entreprise: 1) Rédiger les statuts. 2) Ouvrir un compte bancaire. 3) S'immatriculer au RNE dans les 60 jours."
+السياق: "Pour créer une entreprise: 1) Rédiger les statuts. 2) Ouvrir un compte bancaire. 3) S'immatriculer au RNE \
+dans les 60 jours."
 السؤال: كيفاش نعمل شركة؟
 الجواب الصحيح بالدارجة: باش تعمل شركة، لازم:
 1) تكتب عقد التأسيس
@@ -241,10 +242,12 @@ async def stream_groq(messages: list[dict], api_key: str):
                 yield f"data: {json.dumps({'error': 'Groq API error'})}\n\n"
                 return
             async for line in resp.aiter_lines():
-                if not line.startswith("data: "): continue
+                if not line.startswith("data: "):
+                    continue
                 raw = line[6:].strip()
                 if raw == "[DONE]":
-                    yield "data: [DONE]\n\n"; return
+                    yield "data: [DONE]\n\n"
+                    return
                 try:
                     delta = json.loads(raw)["choices"][0]["delta"].get("content", "")
                     if delta:
@@ -365,9 +368,15 @@ async def chat_stream(
     if lang == "darija":
         detail_instr = "[أعطني جواب كامل ومفصل بالدارجة مع كل الخطوات والآجال والوثائق المطلوبة]"
     elif lang == "fr":
-        detail_instr = "[Donne une réponse complète et détaillée avec toutes les étapes, délais officiels, frais et documents requis. Utilise des listes numérotées.]"
+        detail_instr = (
+            "[Donne une réponse complète et détaillée avec toutes les étapes, délais officiels, frais et documents "
+            "requis. Utilise des listes numérotées.]"
+        )
     else:
-        detail_instr = "[Give a complete and detailed answer with all steps, official deadlines, fees and required documents. Use numbered lists.]"
+        detail_instr = (
+            "[Give a complete and detailed answer with all steps, official deadlines, fees and required documents. Use "
+            "numbered lists.]"
+        )
 
     messages.append({
         "role":    "user",

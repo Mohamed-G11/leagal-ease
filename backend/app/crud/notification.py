@@ -89,13 +89,13 @@ def check_deadlines(db: Session) -> int:
 def get_user_notifications(db: Session, user_id: int, unread_only: bool = False):
     query = db.query(Notification).filter(Notification.user_id == user_id)
     if unread_only:
-        query = query.filter(Notification.is_read == False)
+        query = query.filter(Notification.is_read.is_(False))
     return query.order_by(Notification.created_at.desc()).limit(50).all()
 
 def get_unread_count(db: Session, user_id: int) -> int:
     return db.query(Notification).filter(
         Notification.user_id == user_id,
-        Notification.is_read == False,
+        Notification.is_read.is_(False),
     ).count()
 
 def mark_read(db: Session, notif_id: int, user_id: int) -> bool:
@@ -112,7 +112,7 @@ def mark_read(db: Session, notif_id: int, user_id: int) -> bool:
 def mark_all_read(db: Session, user_id: int) -> int:
     count = db.query(Notification).filter(
         Notification.user_id == user_id,
-        Notification.is_read == False,
+        Notification.is_read.is_(False),
     ).update({"is_read": True})
     db.commit()
     return count

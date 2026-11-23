@@ -57,8 +57,10 @@ def build_documents(data: list) -> tuple[list, list, list]:
             if isinstance(content, dict):
                 cf = (content.get("fr") or "").strip()
                 ce = (content.get("en") or "").strip()
-                if cf: sections_fr.append(cf)
-                if ce: sections_en.append(ce)
+                if cf:
+                    sections_fr.append(cf)
+                if ce:
+                    sections_en.append(ce)
             elif isinstance(content, str) and content.strip():
                 sections_en.append(content.strip())
 

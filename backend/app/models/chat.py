@@ -8,7 +8,7 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 
 
-class MessageRole(str, enum.Enum):
+class MessageRole(str, enum.Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     user      = "user"
     assistant = "assistant"
 
