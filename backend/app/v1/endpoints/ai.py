@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
-from app.rag.retriever import retrieve, build_context
+from app.rag.retriever import RagBackendUnavailable, retrieve, build_context
 
 try:
     from slowapi import Limiter
@@ -347,6 +347,8 @@ async def chat_stream(
         docs    = retrieve(req.message, lang=lang, top_k=8)
         context = build_context(docs, max_chars=5000)
         print(f"   📊 Docs scores: {[round(d.get('score', 0), 3) for d in docs]}")
+    except RagBackendUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError:
         docs    = []
         context = ""

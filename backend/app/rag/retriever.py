@@ -1,13 +1,24 @@
 # app/rag/retriever.py
 # Retrieves relevant documents from ChromaDB for a given question
+#
+# STOPGAP: chromadb is no longer a dependency (Qdrant replaces it, see tasks W2/W3).
+# It is imported lazily in get_collection() so the app can start without it.
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
 from sentence_transformers import SentenceTransformer
-import chromadb
-from typing import Optional
+
+if TYPE_CHECKING:
+    import chromadb
 
 EMBED_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 CHROMA_DIR  = Path(__file__).parent / "chroma_db"
+
+
+class RagBackendUnavailable(RuntimeError):
+    """The vector store backend is not installed or not available."""
 
 # Language mapping — darija → search in French docs
 LANG_MAP = {
@@ -36,6 +47,13 @@ def get_model() -> SentenceTransformer:
 def get_collection() -> chromadb.Collection:
     global _client, _collection
     if _collection is None:
+        try:
+            import chromadb
+        except ImportError as exc:
+            raise RagBackendUnavailable(
+                "Vector store unavailable: chromadb is not installed "
+                "(RAG is being migrated to Qdrant)."
+            ) from exc
         if not CHROMA_DIR.exists():
             raise RuntimeError(
                 "ChromaDB not found. Run: python -m app.rag.ingest"
