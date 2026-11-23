@@ -1,0 +1,43 @@
+# LegalEase-RAG runtime dependencies (Python 3.11). Direct dependencies only.
+# The full resolved set is frozen in requirements.lock.
+
+# Prefer CPU-only PyTorch wheels. Without this, pip on Linux (CI) would pull the
+# multi-GB CUDA build from PyPI. Windows and macOS PyPI wheels are CPU anyway.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- API ---
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.34
+slowapi==0.1.10
+
+# --- Config and validation ---
+pydantic[email]==2.14.4
+pydantic-settings==2.16.3
+python-dotenv==1.2.4
+
+# --- Database (PostgreSQL 16) ---
+sqlalchemy==2.1.9
+alembic==1.20.1
+psycopg2-binary==2.9.13
+
+# --- Auth ---
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 breaks with bcrypt >= 4.1, so keep this pinned below 4.1.
+bcrypt==4.0.1
+python-jose[cryptography]==3.5.0
+
+# --- App features ---
+apscheduler==3.11.3
+reportlab==5.1.0
+resend==2.55.0
+
+# --- RAG: LLM, embeddings, vector store ---
+groq==1.7.0
+qdrant-client==1.20.0
+pymupdf==2.1
+sentence-transformers==6.3.0
+# Resolves to the +cpu wheel from the extra index above.
+torch==2.15.0
+# NOTE: FlagEmbedding will be added in Sprint 2 for BGE-M3 sparse vectors
+# (E1 hybrid search). For E0 we use dense embeddings only, via sentence-transformers.
