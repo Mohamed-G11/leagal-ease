@@ -2,8 +2,9 @@
 # Run once: python -m app.rag.ingest
 import json
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
+
 import chromadb
+from sentence_transformers import SentenceTransformer
 
 BASE_DIR   = Path(__file__).parent
 DATASET    = BASE_DIR / "datasets" / "full_dataset.json"
@@ -111,7 +112,7 @@ def ingest():
     print(f"✅ Model: {EMBED_MODEL}")
 
     print("🔄 Loading dataset...")
-    with open(DATASET, "r", encoding="utf-8") as f:
+    with open(DATASET, encoding="utf-8") as f:
         data = json.load(f)
     print(f"✅ {len(data)} entries loaded")
 

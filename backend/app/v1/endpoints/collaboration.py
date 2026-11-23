@@ -1,14 +1,14 @@
 # app/v1/endpoints/collaboration.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models.user import User
 from app.models.collaboration import ProcedureCollaborator
 from app.models.procedure import UserProcedure
+from app.models.user import User
 
 router = APIRouter(prefix="/team", tags=["Team & Collaboration"])
 

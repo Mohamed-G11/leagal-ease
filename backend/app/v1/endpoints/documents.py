@@ -1,14 +1,14 @@
 # app/v1/endpoints/documents.py
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.crud import document as crud_doc
 from app.models.user import User
 from app.schemas.procedure import StepDocumentResponse
-from app.crud import document as crud_doc
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -30,7 +30,7 @@ def upload_document(
 
 @router.get(
     "/steps/{progress_id}",
-    response_model=List[StepDocumentResponse],
+    response_model=list[StepDocumentResponse],
 )
 def list_documents(
     progress_id: int,

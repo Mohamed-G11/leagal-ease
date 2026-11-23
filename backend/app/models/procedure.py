@@ -1,8 +1,10 @@
 # app/models/procedure.py  (updated — adds due_date on UserStepProgress)
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Text, BigInteger
+import enum
+
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.core.database import Base
 
 

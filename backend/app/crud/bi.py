@@ -1,44 +1,51 @@
 # app/crud/bi.py  — Business Intelligence analytics queries
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 
-from app.models.user import User
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.models.procedure import (
-    UserProcedure, UserStepProgress, ProcedureType,
-    ProcedureStep, StepDocument, StepStatus,
+    ProcedureStep,
+    ProcedureType,
+    StepDocument,
+    StepStatus,
+    UserProcedure,
+    UserStepProgress,
 )
+from app.models.user import User
 from app.schemas.admin import (
-    BIDashboard, TimeSeriesPoint, TimeSeriesData,
-    FunnelStep, FunnelData,
-    UserActivity, DocumentTypeStat,
-    ProcedureTypeStat, StepStat,
+    BIDashboard,
+    DocumentTypeStat,
+    FunnelData,
+    FunnelStep,
+    ProcedureTypeStat,
+    StepStat,
+    TimeSeriesPoint,
+    UserActivity,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _to_utc(dt: datetime) -> datetime:
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 def _date_str(dt: datetime) -> str:
     return _to_utc(dt).strftime('%Y-%m-%d') if dt else ''
 
 
-def _days_range(days: int) -> List[str]:
+def _days_range(days: int) -> list[str]:
     """Return list of ISO date strings for the last N days."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     return [(today - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
 
 
 # ── Time series ───────────────────────────────────────────────────────────────
 
-def get_registrations_series(db: Session, days: int = 30) -> List[TimeSeriesPoint]:
+def get_registrations_series(db: Session, days: int = 30) -> list[TimeSeriesPoint]:
     """New user registrations per day for the last N days."""
     users = db.query(User).filter(User.created_at.isnot(None)).all()
     counts: dict = defaultdict(int)
@@ -49,7 +56,7 @@ def get_registrations_series(db: Session, days: int = 30) -> List[TimeSeriesPoin
     return [TimeSeriesPoint(date=d, value=counts.get(d, 0)) for d in date_range]
 
 
-def get_procedures_started_series(db: Session, days: int = 30) -> List[TimeSeriesPoint]:
+def get_procedures_started_series(db: Session, days: int = 30) -> list[TimeSeriesPoint]:
     """Procedures started per day for the last N days."""
     procs = db.query(UserProcedure).filter(UserProcedure.started_at.isnot(None)).all()
     counts: dict = defaultdict(int)
@@ -60,7 +67,7 @@ def get_procedures_started_series(db: Session, days: int = 30) -> List[TimeSerie
     return [TimeSeriesPoint(date=d, value=counts.get(d, 0)) for d in date_range]
 
 
-def get_completions_series(db: Session, days: int = 30) -> List[TimeSeriesPoint]:
+def get_completions_series(db: Session, days: int = 30) -> list[TimeSeriesPoint]:
     """Procedures completed per day for the last N days."""
     procs = db.query(UserProcedure).filter(UserProcedure.completed_at.isnot(None)).all()
     counts: dict = defaultdict(int)
@@ -73,7 +80,7 @@ def get_completions_series(db: Session, days: int = 30) -> List[TimeSeriesPoint]
 
 # ── Funnel ────────────────────────────────────────────────────────────────────
 
-def get_funnel(db: Session, procedure_type_id: int) -> Optional[FunnelData]:
+def get_funnel(db: Session, procedure_type_id: int) -> FunnelData | None:
     """
     Compute a step-by-step completion funnel for one procedure type.
     For each step: how many users reached it, completed it, got blocked.
@@ -93,7 +100,7 @@ def get_funnel(db: Session, procedure_type_id: int) -> Optional[FunnelData]:
         .scalar() or 0
     )
 
-    funnel: List[FunnelStep] = []
+    funnel: list[FunnelStep] = []
     prev_reached = total_users
 
     for step in steps:
@@ -129,7 +136,7 @@ def get_funnel(db: Session, procedure_type_id: int) -> Optional[FunnelData]:
 
 # ── User activity ─────────────────────────────────────────────────────────────
 
-def get_user_activity(db: Session, limit: int = 20) -> List[UserActivity]:
+def get_user_activity(db: Session, limit: int = 20) -> list[UserActivity]:
     """Top N most active users with procedure + step + doc counts."""
     users = db.query(User).order_by(User.created_at.desc()).all()
 
@@ -186,7 +193,7 @@ def get_user_activity(db: Session, limit: int = 20) -> List[UserActivity]:
 
 # ── Document type distribution ────────────────────────────────────────────────
 
-def get_document_type_stats(db: Session) -> List[DocumentTypeStat]:
+def get_document_type_stats(db: Session) -> list[DocumentTypeStat]:
     """Breakdown of uploaded file types."""
     rows = db.query(StepDocument.content_type).all()
     counts: dict = defaultdict(int)
@@ -216,10 +223,10 @@ def get_document_type_stats(db: Session) -> List[DocumentTypeStat]:
 
 def _to_utc_safe(dt):
     if dt is None: return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
-def get_procedure_type_stats(db: Session) -> List[ProcedureTypeStat]:
+def get_procedure_type_stats(db: Session) -> list[ProcedureTypeStat]:
     stats = []
     for pt in db.query(ProcedureType).all():
         procs = db.query(UserProcedure).filter(UserProcedure.procedure_type_id == pt.id).all()
@@ -250,7 +257,7 @@ def get_procedure_type_stats(db: Session) -> List[ProcedureTypeStat]:
     return stats
 
 
-def get_most_blocked_steps(db: Session, limit: int = 5) -> List[StepStat]:
+def get_most_blocked_steps(db: Session, limit: int = 5) -> list[StepStat]:
     try:
         rows = (
             db.query(UserStepProgress, ProcedureStep, ProcedureType)

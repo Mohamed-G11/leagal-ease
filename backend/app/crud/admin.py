@@ -1,30 +1,41 @@
 # app/crud/admin.py  (updated — full BI analytics)
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Optional
-from datetime import timezone, datetime
 from collections import defaultdict
+from datetime import UTC, datetime
 
-from app.models.user import User
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.models.procedure import (
-    UserProcedure, UserStepProgress, ProcedureType,
-    ProcedureStep, StepDocument, StepStatus,
+    ProcedureStep,
+    ProcedureType,
+    StepDocument,
+    StepStatus,
+    UserProcedure,
+    UserStepProgress,
 )
+from app.models.user import User
 from app.schemas.admin import (
-    AdminUpdateUser, GlobalStats, ProcedureTypeStat, StepStat,
-    AdminProcedureTypeCreate, AdminProcedureTypeUpdate,
-    AdminStepCreate, AdminStepUpdate,
-    TimeSeriesPoint, StepFunnelItem, DocumentTypeStat,
-    UserActivityStat, StatusDistribution,
+    AdminProcedureTypeCreate,
+    AdminProcedureTypeUpdate,
+    AdminStepCreate,
+    AdminStepUpdate,
+    AdminUpdateUser,
+    DocumentTypeStat,
+    GlobalStats,
+    ProcedureTypeStat,
+    StatusDistribution,
+    StepFunnelItem,
+    StepStat,
+    TimeSeriesPoint,
+    UserActivityStat,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _to_utc(dt: datetime) -> datetime:
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 def _month_label(dt: datetime) -> str:
@@ -43,15 +54,15 @@ def _doc_label(ct: str) -> str:
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
-def list_users(db: Session, skip: int = 0, limit: int = 50) -> List[User]:
+def list_users(db: Session, skip: int = 0, limit: int = 50) -> list[User]:
     return db.query(User).order_by(User.created_at.desc()).offset(skip).limit(limit).all()
 
 
-def get_user(db: Session, user_id: int) -> Optional[User]:
+def get_user(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def update_user(db: Session, user_id: int, data: AdminUpdateUser) -> Optional[User]:
+def update_user(db: Session, user_id: int, data: AdminUpdateUser) -> User | None:
     user = get_user(db, user_id)
     if not user:
         return None
@@ -83,7 +94,7 @@ def create_procedure_type(db: Session, data: AdminProcedureTypeCreate) -> Proced
     return pt
 
 
-def update_procedure_type(db: Session, type_id: int, data: AdminProcedureTypeUpdate) -> Optional[ProcedureType]:
+def update_procedure_type(db: Session, type_id: int, data: AdminProcedureTypeUpdate) -> ProcedureType | None:
     pt = db.query(ProcedureType).filter(ProcedureType.id == type_id).first()
     if not pt:
         return None
@@ -101,7 +112,7 @@ def delete_procedure_type(db: Session, type_id: int) -> bool:
     return True
 
 
-def add_step(db: Session, type_id: int, data: AdminStepCreate) -> Optional[ProcedureStep]:
+def add_step(db: Session, type_id: int, data: AdminStepCreate) -> ProcedureStep | None:
     if not db.query(ProcedureType).filter(ProcedureType.id == type_id).first():
         return None
     step = ProcedureStep(procedure_type_id=type_id, **data.model_dump())
@@ -109,7 +120,7 @@ def add_step(db: Session, type_id: int, data: AdminStepCreate) -> Optional[Proce
     return step
 
 
-def update_step(db: Session, step_id: int, data: AdminStepUpdate) -> Optional[ProcedureStep]:
+def update_step(db: Session, step_id: int, data: AdminStepUpdate) -> ProcedureStep | None:
     step = db.query(ProcedureStep).filter(ProcedureStep.id == step_id).first()
     if not step:
         return None
@@ -129,9 +140,9 @@ def delete_step(db: Session, step_id: int) -> bool:
 
 # ── BI: time-series ───────────────────────────────────────────────────────────
 
-def _time_series_last_6_months(rows: list, date_attr: str) -> List[TimeSeriesPoint]:
+def _time_series_last_6_months(rows: list, date_attr: str) -> list[TimeSeriesPoint]:
     """Group any list of ORM objects by month (last 6 months)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     buckets: dict = {}
     for i in range(5, -1, -1):
         from datetime import timedelta
@@ -152,7 +163,7 @@ def _time_series_last_6_months(rows: list, date_attr: str) -> List[TimeSeriesPoi
 
 # ── BI: step funnel ───────────────────────────────────────────────────────────
 
-def _compute_funnels(db: Session) -> List[StepFunnelItem]:
+def _compute_funnels(db: Session) -> list[StepFunnelItem]:
     rows = (
         db.query(UserStepProgress, ProcedureStep)
         .join(ProcedureStep, UserStepProgress.step_id == ProcedureStep.id)
@@ -194,7 +205,7 @@ def _compute_funnels(db: Session) -> List[StepFunnelItem]:
 
 # ── BI: document types ────────────────────────────────────────────────────────
 
-def _compute_doc_stats(db: Session) -> List[DocumentTypeStat]:
+def _compute_doc_stats(db: Session) -> list[DocumentTypeStat]:
     docs = db.query(StepDocument).all()
     total = len(docs)
     if total == 0:
@@ -217,7 +228,7 @@ def _compute_doc_stats(db: Session) -> List[DocumentTypeStat]:
 
 # ── BI: top users ─────────────────────────────────────────────────────────────
 
-def _compute_top_users(db: Session, limit: int = 8) -> List[UserActivityStat]:
+def _compute_top_users(db: Session, limit: int = 8) -> list[UserActivityStat]:
     users = db.query(User).filter(User.is_active == True).all()
     stats = []
     for u in users:

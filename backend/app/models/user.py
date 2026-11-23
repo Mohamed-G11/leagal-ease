@@ -1,11 +1,12 @@
 # app/models/user.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from sqlalchemy.sql import func
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.core.database import Base
 
 # Import des modèles dépendants pour que SQLAlchemy les enregistre
-from app.models.procedure import UserProcedure, Notification   # <-- ajout critique
+
 
 class User(Base):
     __tablename__ = "users"

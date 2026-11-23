@@ -6,9 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.main import app
 from app.core.database import Base, get_db
-from app.core.config import settings
+from app.main import app
 
 # ── Test DB — SQLite in memory ─────────────────────────────────────────────
 TEST_DB_URL = "sqlite:///./test.db"
@@ -275,7 +274,7 @@ class TestAnalytics:
 
     def test_log_query(self):
         """Test that log_query writes to DB."""
-        from app.analytics.tracker import log_query, get_overview
+        from app.analytics.tracker import get_overview, log_query
         db = TestingSessionLocal()
         try:
             initial = get_overview(db)["total_queries"]

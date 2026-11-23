@@ -1,14 +1,11 @@
 # app/crud/document.py
 import uuid
-import os
-import shutil
 from pathlib import Path
-from typing import List, Optional
 
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.models.procedure import StepDocument, UserStepProgress, UserProcedure
+from app.models.procedure import StepDocument, UserProcedure, UserStepProgress
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +87,7 @@ def upload_document(
     return doc
 
 
-def get_documents(db: Session, progress_id: int, user_id: int) -> List[StepDocument]:
+def get_documents(db: Session, progress_id: int, user_id: int) -> list[StepDocument]:
     _assert_progress_owned(db, progress_id, user_id)
     return (
         db.query(StepDocument)

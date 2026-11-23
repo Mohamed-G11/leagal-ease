@@ -7,11 +7,12 @@ Usage:
 """
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.core.database import SessionLocal, engine, Base
-from app.models.procedure import ProcedureType, ProcedureStep   # noqa: F401
-from app.models.user import User                                  # noqa: F401
+from app.core.database import Base, SessionLocal, engine
+from app.models.procedure import ProcedureStep, ProcedureType  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 # Create tables (safe to call multiple times)
 Base.metadata.create_all(bind=engine)

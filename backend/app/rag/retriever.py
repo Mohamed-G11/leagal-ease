@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sentence_transformers import SentenceTransformer
 
@@ -30,9 +30,9 @@ LANG_MAP = {
 }
 
 # Singleton — load once at startup
-_model:      Optional[SentenceTransformer] = None
-_client:     Optional[chromadb.PersistentClient] = None
-_collection: Optional[chromadb.Collection] = None
+_model:      SentenceTransformer | None = None
+_client:     chromadb.PersistentClient | None = None
+_collection: chromadb.Collection | None = None
 
 
 def get_model() -> SentenceTransformer:

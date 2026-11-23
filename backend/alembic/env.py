@@ -1,20 +1,17 @@
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.models.user import User
-from app.models.procedure import StepStatus , ProcedureType , ProcedureStep , UserProcedure , UserStepProgress
-from app.core.database import Base, engine
-from app.core.config import settings
-
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from alembic import context
-from app.models.chat import ChatConversation, ChatMessage
 
-from app.models.analytics import AIQueryLog , AIFeedback
-from app.models.collaboration import ProcedureCollaborator
+from alembic import context
+
+from app.core.config import settings
+from app.core.database import Base, engine
+
+# Import every model module so its tables register on Base.metadata (needed by autogenerate).
+from app.models import analytics, chat, collaboration, procedure, user  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

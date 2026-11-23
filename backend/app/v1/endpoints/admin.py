@@ -1,18 +1,21 @@
 # app/v1/endpoints/admin.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_admin
-from app.schemas.admin import (
-    AdminUserResponse, AdminUpdateUser,
-    GlobalStats,
-    AdminProcedureTypeCreate, AdminProcedureTypeUpdate,
-    AdminStepCreate, AdminStepUpdate,
-)
-from app.schemas.procedure import ProcedureTypeResponse, ProcedureStepResponse
 from app.crud import admin as crud_admin
+from app.schemas.admin import (
+    AdminProcedureTypeCreate,
+    AdminProcedureTypeUpdate,
+    AdminStepCreate,
+    AdminStepUpdate,
+    AdminUpdateUser,
+    AdminUserResponse,
+    GlobalStats,
+)
+from app.schemas.procedure import ProcedureStepResponse, ProcedureTypeResponse
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -29,7 +32,7 @@ def global_stats(
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
-@router.get("/users", response_model=List[AdminUserResponse])
+@router.get("/users", response_model=list[AdminUserResponse])
 def list_users(
     skip: int = 0,
     limit: int = 50,

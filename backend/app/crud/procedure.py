@@ -1,23 +1,25 @@
 # app/crud/procedure.py  (updated — due_date + notification triggers on step update)
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session, joinedload
-from datetime import datetime, timezone
-from typing import List, Optional
 
-from app.models.procedure import (
-    ProcedureType, ProcedureStep,
-    UserProcedure, UserStepProgress, StepStatus,
-)
-from app.schemas.procedure import StartProcedureRequest, UpdateStepStatus, UpdateStepDueDate
 from app.crud import notification as crud_notif
-
+from app.models.procedure import (
+    ProcedureStep,
+    ProcedureType,
+    StepStatus,
+    UserProcedure,
+    UserStepProgress,
+)
+from app.schemas.procedure import StartProcedureRequest, UpdateStepDueDate, UpdateStepStatus
 
 # ── Procedure types ───────────────────────────────────────────────────────────
 
-def get_all_procedure_types(db: Session) -> List[ProcedureType]:
+def get_all_procedure_types(db: Session) -> list[ProcedureType]:
     return db.query(ProcedureType).options(joinedload(ProcedureType.steps)).all()
 
 
-def get_procedure_type(db: Session, procedure_type_id: int) -> Optional[ProcedureType]:
+def get_procedure_type(db: Session, procedure_type_id: int) -> ProcedureType | None:
     return (
         db.query(ProcedureType)
         .options(joinedload(ProcedureType.steps))
@@ -36,7 +38,7 @@ def _load_procedure(q):
     )
 
 
-def get_user_procedures(db: Session, user_id: int) -> List[UserProcedure]:
+def get_user_procedures(db: Session, user_id: int) -> list[UserProcedure]:
     return (
         _load_procedure(db.query(UserProcedure))
         .filter(UserProcedure.user_id == user_id, UserProcedure.is_active == True)
@@ -45,7 +47,7 @@ def get_user_procedures(db: Session, user_id: int) -> List[UserProcedure]:
     )
 
 
-def get_user_procedure(db: Session, user_procedure_id: int, user_id: int) -> Optional[UserProcedure]:
+def get_user_procedure(db: Session, user_procedure_id: int, user_id: int) -> UserProcedure | None:
     return (
         _load_procedure(db.query(UserProcedure))
         .filter(UserProcedure.id == user_procedure_id, UserProcedure.user_id == user_id)
@@ -53,7 +55,7 @@ def get_user_procedure(db: Session, user_procedure_id: int, user_id: int) -> Opt
     )
 
 
-def start_user_procedure(db: Session, user_id: int, data: StartProcedureRequest) -> Optional[UserProcedure]:
+def start_user_procedure(db: Session, user_id: int, data: StartProcedureRequest) -> UserProcedure | None:
     proc_type = get_procedure_type(db, data.procedure_type_id)
     if not proc_type:
         return None
@@ -102,7 +104,7 @@ def update_step_progress(
     step_id: int,
     user_id: int,
     data: UpdateStepStatus,
-) -> Optional[UserStepProgress]:
+) -> UserStepProgress | None:
     user_procedure = get_user_procedure(db, user_procedure_id, user_id)
     if not user_procedure:
         return None
@@ -122,7 +124,7 @@ def update_step_progress(
     progress.notes = data.notes
 
     if data.status == StepStatus.completed:
-        progress.completed_at = datetime.now(timezone.utc)
+        progress.completed_at = datetime.now(UTC)
 
         # Notify step completed
         crud_notif.notify_step_completed(
@@ -147,7 +149,7 @@ def update_step_progress(
             next_progress.status = StepStatus.in_progress
         else:
             # All steps done → close procedure
-            user_procedure.completed_at = datetime.now(timezone.utc)
+            user_procedure.completed_at = datetime.now(UTC)
             crud_notif.notify_procedure_done(
                 db, user_id,
                 procedure_title=user_procedure.title or user_procedure.procedure_type.name,
@@ -165,7 +167,7 @@ def update_step_due_date(
     step_id: int,
     user_id: int,
     data: UpdateStepDueDate,
-) -> Optional[UserStepProgress]:
+) -> UserStepProgress | None:
     """Set or clear the deadline for a step."""
     user_procedure = get_user_procedure(db, user_procedure_id, user_id)
     if not user_procedure:
@@ -198,7 +200,7 @@ def compute_completion(user_procedure: UserProcedure) -> float:
     return round((done / total) * 100, 1)
 
 
-def get_current_step_order(user_procedure: UserProcedure) -> Optional[int]:
+def get_current_step_order(user_procedure: UserProcedure) -> int | None:
     in_progress = [p for p in user_procedure.step_progress if p.status == StepStatus.in_progress]
     if not in_progress:
         return None

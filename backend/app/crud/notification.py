@@ -2,11 +2,12 @@
 # Add this function to your existing notification.py
 # It replaces or extends the existing check_deadlines function
 
-from datetime import datetime, timedelta
+from datetime import datetime
+
 from sqlalchemy.orm import Session
-from app.models.procedure import UserStepProgress, UserProcedure
+
+from app.models.procedure import Notification, UserProcedure, UserStepProgress
 from app.models.user import User
-from app.models.procedure import Notification
 
 # Import email service
 try:
@@ -123,7 +124,7 @@ def notify_step_completed(
 ) -> None:
     notif = Notification(
         user_id          = user_id,
-        title            = f'Step completed',
+        title            = 'Step completed',
         message          = f'✅ Step "{step_title}" completed!',
         type             = "step_completed",
         user_procedure_id = procedure_id,
@@ -140,7 +141,7 @@ def notify_procedure_done(
 ) -> None:
     notif = Notification(
         user_id          = user_id,
-        title            = f'Procedure completed',
+        title            = 'Procedure completed',
         message          = f'🎉 Procedure "{procedure_title}" is fully completed!',
         type             = "procedure_completed",
         user_procedure_id = procedure_id,

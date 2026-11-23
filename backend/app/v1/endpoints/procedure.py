@@ -1,33 +1,33 @@
 # app/v1/endpoints/procedure.py
+from io import BytesIO
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from typing import List
-from io import BytesIO
+from reportlab.lib import colors
 
 # ReportLab imports
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.crud import procedure as crud_procedure
 from app.models.user import User
 from app.schemas.procedure import (
     ProcedureTypeResponse,
-    UserProcedureResponse,
     StartProcedureRequest,
-    UpdateStepStatus,
     UpdateStepDueDate,
+    UpdateStepStatus,
+    UserProcedureResponse,
     UserStepProgressResponse,
 )
-from app.crud import procedure as crud_procedure
 
 router = APIRouter(prefix="/procedures", tags=["Procedures & Timeline"])
 
 
-@router.get("/types", response_model=List[ProcedureTypeResponse])
+@router.get("/types", response_model=list[ProcedureTypeResponse])
 def list_procedure_types(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -47,7 +47,7 @@ def get_procedure_type(
     return pt
 
 
-@router.get("/my", response_model=List[UserProcedureResponse])
+@router.get("/my", response_model=list[UserProcedureResponse])
 def my_procedures(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -1,13 +1,13 @@
 # app/v1/endpoints/notifications.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.crud import notification as crud_notif
 from app.models.user import User
 from app.schemas.procedure import NotificationResponse, NotificationSummary
-from app.crud import notification as crud_notif
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 

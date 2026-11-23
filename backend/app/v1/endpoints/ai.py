@@ -1,18 +1,20 @@
 # app/v1/endpoints/ai.py
 # RAG-powered AI chat with Darija support + conversation history in DB
+import json
+import re
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
 from sqlalchemy.orm import Session
-import json, re, httpx
 
-from app.core.dependencies import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.user import User
+from app.core.dependencies import get_current_user
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
-from app.rag.retriever import RagBackendUnavailable, retrieve, build_context
+from app.models.user import User
+from app.rag.retriever import RagBackendUnavailable, build_context, retrieve
 
 try:
     from slowapi import Limiter
@@ -203,16 +205,16 @@ class ChatMessageSchema(BaseModel):
 
 class ChatRequest(BaseModel):
     message:         str
-    history:         Optional[List[ChatMessageSchema]] = []
-    lang:            Optional[str] = "auto"
-    conversation_id: Optional[int] = None
+    history:         list[ChatMessageSchema] | None = []
+    lang:            str | None = "auto"
+    conversation_id: int | None = None
 
 class ConversationOut(BaseModel):
     id:         int
-    title:      Optional[str]
-    lang:       Optional[str]
+    title:      str | None
+    lang:       str | None
     created_at: str
-    messages:   List[dict]
+    messages:   list[dict]
 
     class Config:
         from_attributes = True
@@ -222,7 +224,7 @@ class ConversationOut(BaseModel):
 # STREAMING HELPER
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def stream_groq(messages: List[dict], api_key: str):
+async def stream_groq(messages: list[dict], api_key: str):
     async with httpx.AsyncClient(timeout=90.0) as client:
         async with client.stream(
             "POST", GROQ_API_URL,
@@ -258,7 +260,7 @@ async def stream_groq(messages: List[dict], api_key: str):
 def get_or_create_conversation(
     db: Session,
     user_id: int,
-    conversation_id: Optional[int],
+    conversation_id: int | None,
     first_message: str,
     lang: str,
 ) -> ChatConversation:
@@ -285,7 +287,7 @@ def save_message(db: Session, conversation_id: int, role: MessageRole, content: 
     return msg
 
 
-def load_history_from_db(db: Session, conversation_id: int, limit: int = 10) -> List[dict]:
+def load_history_from_db(db: Session, conversation_id: int, limit: int = 10) -> list[dict]:
     messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id == conversation_id)

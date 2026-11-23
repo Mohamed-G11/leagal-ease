@@ -2,6 +2,7 @@
 # Email service using Resend API
 # Sends deadline reminders and notifications to users
 import resend
+
 from app.core.config import settings
 
 
