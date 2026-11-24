@@ -10,3 +10,12 @@ python-jose[cryptography]
 python-multipart
 aiofiles
 apscheduler
+# --- RAG / experiments ---
+pyyaml
+pymupdf
+qdrant-client
+sentence-transformers
+groq
+numpy
+mlflow
+pytest

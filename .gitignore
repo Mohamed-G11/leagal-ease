@@ -40,3 +40,7 @@ mlartifacts/
 
 # --- Local checks ---
 secrets_check.txt
+# --- RAG experiments (Wiem) ---
+qdrant_local/
+mlflow.db
+data/raw/
