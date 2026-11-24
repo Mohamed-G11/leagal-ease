@@ -1,6 +1,6 @@
-"""W2 — Temporary ingestion for E0 (replaced by Hend's parser later).
+"""W2 — Temporary ingestion for E0/E1 (replaced by Hend's parser later).
 
-Page by page -> chunks of ~max_tokens with overlap -> BGE-M3 -> Qdrant.
+Page by page -> chunks of ~max_tokens with overlap -> BGE-M3 dense + BM25 sparse -> Qdrant.
 Each chunk keeps doc_id + page so answers can cite their source.
 
 Run:
@@ -99,7 +99,8 @@ def pdf_to_chunks(pdf_path: Path, cfg: ExperimentConfig, count: Callable[[str], 
 
 def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
     from app.retrieval.embedder import get_embedder
-    from app.retrieval.store import DENSE, get_client, point_id, recreate_collection
+    from app.retrieval.sparse import BM25Encoder
+    from app.retrieval.store import DENSE, SPARSE, get_client, point_id, recreate_collection
 
     embedder = embedder or get_embedder(cfg.embedding)
     pdfs = sorted(pdf_dir.glob("*.pdf"))
@@ -112,6 +113,7 @@ def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
         print(f"  {pdf.name}: {len(chunks)} chunks")
         all_chunks.extend(chunks)
 
+    bm25 = BM25Encoder(**cfg.retrieval.bm25.model_dump())
     client = get_client(cfg.qdrant)
     recreate_collection(client, cfg.qdrant.collection, embedder.dim)
 
@@ -122,7 +124,11 @@ def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
         client.upsert(
             collection_name=cfg.qdrant.collection,
             points=[
-                models.PointStruct(id=point_id(c.chunk_id), vector={DENSE: v.tolist()}, payload=c.model_dump())
+                models.PointStruct(
+                    id=point_id(c.chunk_id),
+                    vector={DENSE: v.tolist(), SPARSE: bm25.encode_document(c.text)},
+                    payload=c.model_dump(),
+                )
                 for c, v in zip(part, vectors)
             ],
         )

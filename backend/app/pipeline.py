@@ -1,4 +1,4 @@
-"""E0 pipeline: retrieve -> generate. This is what Mohamed's /chat calls (W6).
+"""RAG pipeline (E0 dense / E1 hybrid, chosen by config): retrieve -> generate. This is what Mohamed's /chat calls (W6).
 
 Run:
     python -m app.pipeline "Quel est le rôle du RNE ?" \
@@ -10,13 +10,13 @@ from pathlib import Path
 from app.core.experiment_config import ExperimentConfig, load_config
 from app.core.schemas import Answer
 from app.generation.generator import Generator
-from app.retrieval.dense import DenseRetriever
+from app.retrieval.hybrid import get_retriever
 
 
 class RAGPipeline:
     def __init__(self, cfg: ExperimentConfig, retriever=None, generator=None):
         self.cfg = cfg
-        self.retriever = retriever or DenseRetriever(cfg)
+        self.retriever = retriever or get_retriever(cfg)
         self.generator = generator or Generator(cfg.llm)
 
     def answer(self, question: str, filters: dict | None = None) -> Answer:

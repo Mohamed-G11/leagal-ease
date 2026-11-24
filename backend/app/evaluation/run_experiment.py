@@ -51,7 +51,7 @@ def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: P
     dataset = load_dataset(dataset_path)
 
     with mlflow.start_run(run_name=cfg.name):
-        mlflow.set_tags({"stage": cfg.name.split("_")[0], "git_commit": git_commit(),
+        mlflow.set_tags({"stage": cfg.name.split("_")[0], "retrieval_mode": cfg.retrieval.mode, "git_commit": git_commit(),
                          "dataset": dataset_path.name, "owner": "wiem"})
         mlflow.log_params({k: str(v) for k, v in flatten(cfg.model_dump()).items()})
         mlflow.log_param("n_questions", len(dataset))
@@ -62,8 +62,8 @@ def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: P
             mlflow.log_metric("n_chunks", ingest(pdf_dir, cfg, embedder=embedder))
 
         if retriever is None:
-            from app.retrieval.dense import DenseRetriever
-            retriever = DenseRetriever(cfg, embedder=embedder)
+            from app.retrieval.hybrid import get_retriever
+            retriever = get_retriever(cfg, embedder=embedder)
         metrics, rows = evaluate_retrieval(retriever, dataset)
 
         gen_rows = []

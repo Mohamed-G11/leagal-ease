@@ -8,6 +8,7 @@ from qdrant_client import QdrantClient, models
 from app.core.experiment_config import QdrantConfig
 
 DENSE = "dense"
+SPARSE = "bm25"
 
 
 def get_client(cfg: QdrantConfig) -> QdrantClient:
@@ -22,6 +23,8 @@ def recreate_collection(client: QdrantClient, name: str, dim: int) -> None:
     client.create_collection(
         collection_name=name,
         vectors_config={DENSE: models.VectorParams(size=dim, distance=models.Distance.COSINE)},
+        # IDF is computed by Qdrant over the whole collection (BM25, E1)
+        sparse_vectors_config={SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
     )
     # payload indexes make metadata filtering fast
     with warnings.catch_warnings():  # local mode ignores indexes; server mode uses them
