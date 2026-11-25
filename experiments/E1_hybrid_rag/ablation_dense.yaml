@@ -1,0 +1,26 @@
+# E1 — Hybrid RAG: BGE-M3 dense + BM25 sparse, fused with RRF (Qdrant)
+name: E1_ablation_dense
+
+embedding:
+  model: BAAI/bge-m3
+  batch_size: 16
+
+qdrant:
+  path: ./qdrant_local
+  collection: legalease_e1   # dense + bm25 vectors (rebuild with --reindex)
+
+chunking:
+  max_tokens: 500
+  overlap_tokens: 50
+
+retrieval:
+  mode: dense             # dense | sparse | hybrid
+  top_k: 5
+  prefetch_k: 20             # candidates per branch before RRF
+  bm25: {k1: 1.2, b: 0.75, avg_len: 256}
+
+llm:
+  provider: groq
+  model: openai/gpt-oss-120b
+  temperature: 0.0
+  max_tokens: 2048

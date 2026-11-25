@@ -1,6 +1,7 @@
 """Experiment config loader (W5). Secrets come from the environment only."""
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel
@@ -25,8 +26,17 @@ class ChunkingConfig(BaseModel):
     overlap_tokens: int = 50
 
 
+class BM25Config(BaseModel):
+    k1: float = 1.2
+    b: float = 0.75
+    avg_len: float = 256.0
+
+
 class RetrievalConfig(BaseModel):
+    mode: Literal["dense", "sparse", "hybrid"] = "dense"  # E0 = dense, E1 = hybrid
     top_k: int = 5
+    prefetch_k: int = 20  # candidates taken from each branch before RRF fusion
+    bm25: BM25Config = BM25Config()
 
 
 class LLMConfig(BaseModel):
