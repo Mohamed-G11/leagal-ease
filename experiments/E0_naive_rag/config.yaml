@@ -1,0 +1,25 @@
+# E0 — Naive RAG: dense retrieval (BGE-M3) + LLM
+name: E0_naive_rag
+
+embedding:
+  model: BAAI/bge-m3
+  batch_size: 16
+  device: null          # auto (cuda if available)
+
+qdrant:
+  url: null             # set to http://localhost:6333 once Mohamed's docker-compose is up
+  path: ./qdrant_local  # local mode until then
+  collection: legalease_e0
+
+chunking:
+  max_tokens: 500
+  overlap_tokens: 50
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: groq
+  model: openai/gpt-oss-120b
+  temperature: 0.0
+  max_tokens: 2048
