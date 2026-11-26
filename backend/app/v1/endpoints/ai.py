@@ -1,30 +1,32 @@
 # app/v1/endpoints/ai.py
 # RAG-powered AI chat with Darija support + conversation history in DB
 import json
+import logging
 import re
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.core.errors import ERROR_RESPONSES, APIError
+from app.core.errors import ERROR_RESPONSES, APIError, ErrorResponse
 from app.models.chat import ChatConversation
 from app.models.user import User
 from app.schemas.chat import MAX_MESSAGE_LENGTH, ChatOut
 from app.services.chat import ask
 
-try:
-    from slowapi import Limiter
-    from slowapi.util import get_remote_address
-    limiter = Limiter(key_func=get_remote_address)
-    HAS_LIMITER = True
-except ImportError:
-    HAS_LIMITER = False
+logger = logging.getLogger(__name__)
+
+# Counted per client IP, in memory (so per server process).
+limiter = Limiter(key_func=get_remote_address)
+PUBLIC_RATE_LIMIT = "10/minute"
 
 router = APIRouter(prefix="/ai", tags=["AI Assistant"])
 
@@ -207,8 +209,16 @@ class ChatRequest(BaseModel):
     lang:            str | None = "auto"
     conversation_id: int | None = None
 
-class StreamChatRequest(ChatRequest):  # /chat/public keeps ChatRequest, without the limit
+class StreamChatRequest(ChatRequest):
     message: str = Field(max_length=MAX_MESSAGE_LENGTH)
+
+class PublicMessage(BaseModel):
+    role:    Literal["user", "assistant"]  # never "system": visitors must not replace the instructions
+    content: str
+
+class PublicChatRequest(BaseModel):
+    message: str = Field(max_length=MAX_MESSAGE_LENGTH)
+    history: list[PublicMessage] | None = []
 
 class ConversationOut(BaseModel):
     id:         int
@@ -225,51 +235,81 @@ class ConversationOut(BaseModel):
 # STREAMING HELPER
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def stream_groq(messages: list[dict], api_key: str):
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        async with client.stream(
-            "POST", GROQ_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model":       GROQ_MODEL,
-                "messages":    messages,
-                "max_tokens":  2048,
-                "temperature": 0.0,   # 0.0 = déterministe, élimine hallucinations
-                "stream":      True,
-            },
-        ) as resp:
-            if resp.status_code != 200:
-                yield f"data: {json.dumps({'error': 'Groq API error'})}\n\n"
+def groq_error() -> APIError:
+    return APIError(502, "llm_error", "The language model could not answer. Try again.")
+
+
+async def open_groq_stream(messages: list[dict], api_key: str):
+    """Send the request and check Groq's status before our response starts, so failures get a real HTTP error."""
+    client = httpx.AsyncClient(timeout=90.0)
+    request = client.build_request(
+        "POST", GROQ_API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "model":       GROQ_MODEL,
+            "messages":    messages,
+            "max_tokens":  2048,
+            "temperature": 0.0,   # 0.0 = déterministe, élimine hallucinations
+            "stream":      True,
+        },
+    )
+    try:
+        resp = await client.send(request, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        logger.warning("Groq is not reachable", exc_info=True)
+        raise groq_error() from exc
+    if resp.status_code != 200:
+        logger.warning("Groq answered HTTP %s", resp.status_code)
+        await resp.aclose()
+        await client.aclose()
+        raise groq_error()
+    return stream_groq(client, resp)
+
+
+async def stream_groq(client: httpx.AsyncClient, resp: httpx.Response):
+    try:
+        async for line in resp.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            raw = line[6:].strip()
+            if raw == "[DONE]":
+                yield "data: [DONE]\n\n"
                 return
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                raw = line[6:].strip()
-                if raw == "[DONE]":
-                    yield "data: [DONE]\n\n"
-                    return
-                try:
-                    delta = json.loads(raw)["choices"][0]["delta"].get("content", "")
-                    if delta:
-                        yield f"data: {json.dumps({'chunk': delta})}\n\n"
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
+            try:
+                delta = json.loads(raw)["choices"][0]["delta"].get("content", "")
+                if delta:
+                    yield sse({"chunk": delta})
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+    except httpx.HTTPError:
+        # The response has already started: the status cannot change, so send the error shape as an event.
+        logger.warning("Groq stream interrupted", exc_info=True)
+        error = groq_error()
+        yield sse({"error": {"code": error.code, "message": error.detail}, "detail": error.detail})
+    finally:
+        await resp.aclose()
+        await client.aclose()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.post("/chat/public")
-async def chat_public(request: Request, req: ChatRequest):
+@router.post(
+    "/chat/public",
+    responses={status: ERROR_RESPONSES.get(status, {"model": ErrorResponse}) for status in (422, 429, 502, 503)},
+)
+@limiter.limit(PUBLIC_RATE_LIMIT)
+async def chat_public(request: Request, req: PublicChatRequest):
     """No auth — Home page welcome bot."""
     messages = [{"role": "system", "content": PUBLIC_PROMPT}]
     for m in (req.history or [])[-6:]:
-        messages.append({"role": m.role, "content": m.content})
+        messages.append({"role": m.role, "content": m.content[:MAX_MESSAGE_LENGTH]})
     messages.append({"role": "user", "content": req.message})
 
     return StreamingResponse(
-        stream_groq(messages, get_groq_key()),
+        await open_groq_stream(messages, get_groq_key()),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
