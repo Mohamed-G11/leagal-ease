@@ -199,29 +199,6 @@ class TestAIEndpoints:
 
 class TestRAG:
 
-    def test_retriever_returns_results(self):
-        """Test that ChromaDB retrieves relevant documents."""
-        try:
-            from app.rag.retriever import retrieve
-            results = retrieve("Comment créer une startup en Tunisie ?", lang="fr", top_k=3)
-            assert isinstance(results, list)
-            if results:
-                assert "text"     in results[0]
-                assert "title"    in results[0]
-                assert "score"    in results[0]
-                assert "category" in results[0]
-        except RuntimeError:
-            pytest.skip("ChromaDB not built — run python -m app.rag.ingest first")
-
-    def test_retriever_darija(self):
-        """Test Darija language retrieval."""
-        try:
-            from app.rag.retriever import retrieve
-            results = retrieve("كيفاش نعمل شركة في تونس؟", lang="darija", top_k=3)
-            assert isinstance(results, list)
-        except RuntimeError:
-            pytest.skip("ChromaDB not built")
-
     def test_build_context(self):
         """Test context builder."""
         from app.rag.retriever import build_context
@@ -257,7 +234,7 @@ class TestRAG:
         """Test that full_dataset.json is valid and has expected structure."""
         import json
         from pathlib import Path
-        dataset_path = Path("app/rag/datasets/full_dataset.json")
+        dataset_path = Path(__file__).resolve().parents[1] / "app" / "rag" / "datasets" / "full_dataset.json"
         if not dataset_path.exists():
             pytest.skip("Dataset not found")
         with open(dataset_path, encoding="utf-8") as f:

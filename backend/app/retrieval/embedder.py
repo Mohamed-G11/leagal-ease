@@ -11,7 +11,11 @@ class DenseEmbedder:
 
         self.cfg = cfg
         self.model = SentenceTransformer(cfg.model, device=cfg.device)
-        self.dim = self.model.get_embedding_dimension() if hasattr(self.model, "get_embedding_dimension") else self.model.get_sentence_embedding_dimension()
+        self.dim = (
+            self.model.get_embedding_dimension()
+            if hasattr(self.model, "get_embedding_dimension")
+            else self.model.get_sentence_embedding_dimension()
+        )
 
     def count_tokens(self, text: str) -> int:
         return len(self.model.tokenizer.tokenize(text))

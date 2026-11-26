@@ -51,8 +51,8 @@ def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: P
     dataset = load_dataset(dataset_path)
 
     with mlflow.start_run(run_name=cfg.name):
-        mlflow.set_tags({"stage": cfg.name.split("_")[0], "retrieval_mode": cfg.retrieval.mode, "git_commit": git_commit(),
-                         "dataset": dataset_path.name, "owner": "wiem"})
+        mlflow.set_tags({"stage": cfg.name.split("_")[0], "retrieval_mode": cfg.retrieval.mode,
+                         "git_commit": git_commit(), "dataset": dataset_path.name, "owner": "wiem"})
         mlflow.log_params({k: str(v) for k, v in flatten(cfg.model_dump()).items()})
         mlflow.log_param("n_questions", len(dataset))
         mlflow.log_artifact(str(config_path))
