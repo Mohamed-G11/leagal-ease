@@ -155,13 +155,13 @@ class TestProtectedRoutes:
 
 class TestAIEndpoints:
 
-    def test_health_endpoint(self, client):
-        resp = client.get("/api/v1/ai/health")
+    def test_health_endpoint(self, client, monkeypatch):
+        from app.services.rag import rag_service
+        monkeypatch.setattr(rag_service, "qdrant_status", lambda: "ok")  # no Qdrant in tests
+        resp = client.get("/health")
         assert resp.status_code == 200
-        data = resp.json()
-        assert "configured" in data
-        assert "model" in data
-        assert "rag_ready" in data
+        assert resp.json()["checks"]["postgres"] == "ok"
+        assert client.get("/api/v1/ai/health").status_code == 404
 
     def test_public_chat_no_auth_required(self, client):
         """Public endpoint should work without token."""

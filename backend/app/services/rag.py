@@ -1,0 +1,81 @@
+"""Loads the RAG pipeline once, in the background, and reports its state."""
+import logging
+import threading
+from pathlib import Path
+
+from app.core.config import settings  # also loads .env, so QDRANT_URL and GROQ_API_KEY are in the environment
+from app.core.errors import APIError
+
+logger = logging.getLogger(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+class RagService:
+    def __init__(self, config_path: str):
+        self.config_path = REPO_ROOT / config_path  # an absolute path stays as it is
+        self.state = "loading"  # loading -> ready | failed
+        self.cfg = None
+        self.pipeline = None
+        self._thread = None
+        self._probe = None
+
+    def start(self) -> None:
+        """Load in a background thread so the server answers while the embedding model loads."""
+        if self._thread is None:
+            self._thread = threading.Thread(target=self.load, name="rag-loader", daemon=True)
+            self._thread.start()
+
+    def load(self) -> None:
+        try:
+            from app.core.experiment_config import load_config
+            from app.pipeline import RAGPipeline
+
+            self.cfg = load_config(self.config_path)
+            self.pipeline = RAGPipeline(self.cfg)
+            self.state = "ready"
+            logger.info("RAG pipeline ready (%s)", self.cfg.name)
+        except Exception:
+            self.state = "failed"
+            logger.exception("RAG pipeline failed to load from %s", self.config_path)
+
+    def _qdrant_client(self):
+        if self.cfg is None:
+            return None
+        if not self.cfg.qdrant.url:
+            # Local mode allows one client per folder: reuse the pipeline's.
+            return self.pipeline.retriever.client if self.pipeline else None
+        if self._probe is None:
+            from qdrant_client import QdrantClient
+
+            self._probe = QdrantClient(url=self.cfg.qdrant.url, timeout=2, check_compatibility=False)
+        return self._probe
+
+    def qdrant_status(self) -> str:
+        """ok | empty (collection missing or without points) | down | loading"""
+        try:
+            client = self._qdrant_client()
+            if client is None:
+                return "loading" if self.state == "loading" else "down"
+            name = self.cfg.qdrant.collection
+            if not client.collection_exists(name) or client.count(name).count == 0:
+                return "empty"
+            return "ok"
+        except Exception:
+            logger.warning("Qdrant check failed", exc_info=True)
+            return "down"
+
+    def ready_pipeline(self):
+        """The pipeline, or a 503 explaining why it cannot answer. Qdrant is checked on every call."""
+        if self.state == "loading":
+            raise APIError(503, "rag_loading", "The assistant is still starting. Try again in a moment.")
+        if self.state == "failed":
+            raise APIError(503, "rag_unavailable", "The assistant failed to start.")
+        status = self.qdrant_status()
+        if status != "ok":
+            reason = "has no indexed documents" if status == "empty" else "is not reachable"
+            raise APIError(503, "rag_unavailable", f"The document index {reason}.")
+        return self.pipeline
+
+
+rag_service = RagService(settings.RAG_CONFIG)

@@ -6,9 +6,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import health
 from app.core.database import SessionLocal
 from app.core.errors import register_error_handlers
 from app.crud.notification import check_deadlines
+from app.services.rag import rag_service
 from app.v1.endpoints import (
     admin,
     ai,
@@ -40,6 +42,7 @@ scheduler.add_job(run_deadline_check, trigger="cron", hour=8, minute=0,
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler.start()
+    rag_service.start()
     yield
     scheduler.shutdown()
 
@@ -57,6 +60,7 @@ app.add_middleware(
 
 Path("uploads").mkdir(exist_ok=True)
 
+app.include_router(health.router)
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(procedure.router,     prefix="/api/v1")
 app.include_router(documents.router,     prefix="/api/v1")

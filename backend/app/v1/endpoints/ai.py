@@ -499,16 +499,3 @@ async def delete_conversation(
     db.commit()
     return {"message": "Conversation deleted"}
 
-
-@router.get("/health")
-async def ai_health():
-    from app.rag.retriever import CHROMA_DIR
-    rag_ready = (CHROMA_DIR / "chroma.sqlite3").exists()
-    return {
-        "configured":       bool(settings.GROQ_API_KEY),
-        "model":            GROQ_MODEL,
-        "rag_ready":        rag_ready,
-        "vectors":          563,
-        "public_endpoint":  "POST /api/v1/ai/chat/public",
-        "private_endpoint": "POST /api/v1/ai/chat/stream (RAG + history + Darija)",
-    }
