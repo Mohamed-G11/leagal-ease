@@ -33,6 +33,8 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+After pulling, run `alembic upgrade head` from `backend/`.
+
 `DATABASE_URL` must start with `postgresql+psycopg2://`. SQLAlchemy 2.1 maps a plain `postgresql://` to psycopg v3,
 which is not installed.
 
