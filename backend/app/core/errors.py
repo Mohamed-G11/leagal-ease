@@ -6,11 +6,13 @@
 """
 import logging
 from http import HTTPStatus
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -26,12 +28,37 @@ CODES_BY_STATUS = {
 }
 
 
+class ErrorInfo(BaseModel):
+    code: str
+    message: str
+    details: Any = None  # validation errors, or {"conversation_id": ...} for a failed chat
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorInfo
+    detail: Any
+
+
+# For the `responses=` argument of a route, so that Swagger shows the error shape.
+ERROR_RESPONSES = {
+    status: {"model": ErrorResponse, "description": description}
+    for status, description in {
+        401: "unauthorized",
+        422: "validation_error",
+        500: "internal_error",
+        502: "llm_error",
+        503: "rag_loading, rag_unavailable or database_unavailable",
+    }.items()
+}
+
+
 class APIError(HTTPException):
     """HTTPException with an explicit error code."""
 
-    def __init__(self, status_code: int, code: str, message: str):
+    def __init__(self, status_code: int, code: str, message: str, details: dict | None = None):
         super().__init__(status_code=status_code, detail=message)
         self.code = code
+        self.details = details
 
 
 def error_response(status_code: int, code: str, message: str, detail=None, details=None, headers=None) -> JSONResponse:
@@ -48,7 +75,8 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> J
         "bad_request" if status < 500 else "internal_error"
     )
     message = exc.detail if isinstance(exc.detail, str) else HTTPStatus(status).phrase
-    return error_response(status, code, message, detail=exc.detail, headers=exc.headers)
+    details = getattr(exc, "details", None)
+    return error_response(status, code, message, detail=exc.detail, details=details, headers=exc.headers)
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

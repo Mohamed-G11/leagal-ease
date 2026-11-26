@@ -16,6 +16,7 @@ from app.v1.endpoints import (
     ai,
     analytics,
     auth,
+    chat,
     collaboration,
     documents,
     feedback,
@@ -67,6 +68,7 @@ app.include_router(documents.router,     prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(admin.router,         prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
