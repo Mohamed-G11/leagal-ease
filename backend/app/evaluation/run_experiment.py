@@ -45,7 +45,8 @@ def write_jsonl(rows: list[dict], path: Path) -> None:
 
 
 def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: Path | None,
-        reindex: bool, generation: bool, retriever=None, pipeline=None, embedder=None) -> dict:
+        reindex: bool, generation: bool, retriever=None, pipeline=None, embedder=None,
+        register: bool = False, promote: bool = False) -> dict:
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     mlflow.set_experiment(EXPERIMENT)
     dataset = load_dataset(dataset_path)
@@ -83,6 +84,14 @@ def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: P
                 write_jsonl(gen_rows, Path(tmp) / "generation_results.jsonl")
                 mlflow.log_artifact(str(Path(tmp) / "generation_results.jsonl"))
 
+        if register:  # inside the run: the model version is linked to these params and metrics
+            from app.registry.register import register_pipeline
+            version = register_pipeline(cfg, config_path, metrics)
+
+    if register and promote:
+        from app.registry.promote import promote as promote_version
+        promote_version(version)
+
     print(json.dumps(metrics, indent=2))
     return metrics
 
@@ -94,5 +103,8 @@ if __name__ == "__main__":
     p.add_argument("--pdf-dir", type=Path, default=Path("../data/raw"))
     p.add_argument("--reindex", action="store_true", help="rebuild the collection with this config's model")
     p.add_argument("--generation", action="store_true", help="also call the LLM (uses Groq quota)")
+    p.add_argument("--register", action="store_true", help="log the pipeline as a new version of 'legalease-rag'")
+    p.add_argument("--promote", action="store_true", help="after --register, apply the promotion rule")
     a = p.parse_args()
-    run(load_config(a.config), a.config, a.dataset, a.pdf_dir, a.reindex, a.generation)
+    run(load_config(a.config), a.config, a.dataset, a.pdf_dir, a.reindex, a.generation,
+        register=a.register, promote=a.promote)
