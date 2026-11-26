@@ -66,7 +66,8 @@ def test_codes_by_status(client, status, code):
 def test_slowapi_limit_uses_the_same_shape(client):
     resp = client.get("/limited")
     assert resp.status_code == 429
-    assert resp.json()["error"] == {"code": "rate_limited", "message": "5 per 1 minute"}
+    message = "Too many requests. Please wait a minute and try again."
+    assert resp.json() == {"error": {"code": "rate_limited", "message": message}, "detail": message}
 
 
 def test_validation_error(client):

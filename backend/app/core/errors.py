@@ -13,6 +13,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -26,6 +27,8 @@ CODES_BY_STATUS = {
     422: "validation_error",
     429: "rate_limited",
 }
+# slowapi's own message is the limit itself ("10 per 1 minute"). Our limits are all per minute.
+RATE_LIMIT_MESSAGE = "Too many requests. Please wait a minute and try again."
 
 
 class ErrorInfo(BaseModel):
@@ -74,9 +77,10 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> J
     code = getattr(exc, "code", None) or CODES_BY_STATUS.get(status) or (
         "bad_request" if status < 500 else "internal_error"
     )
-    message = exc.detail if isinstance(exc.detail, str) else HTTPStatus(status).phrase
+    detail = RATE_LIMIT_MESSAGE if isinstance(exc, RateLimitExceeded) else exc.detail
+    message = detail if isinstance(detail, str) else HTTPStatus(status).phrase
     details = getattr(exc, "details", None)
-    return error_response(status, code, message, detail=exc.detail, details=details, headers=exc.headers)
+    return error_response(status, code, message, detail=detail, details=details, headers=exc.headers)
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
