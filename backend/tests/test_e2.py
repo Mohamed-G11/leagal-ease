@@ -80,3 +80,16 @@ def test_advanced_retriever_end_to_end(setup):  # noqa: F811
 def test_disabled_bricks_return_base_retriever(setup):  # noqa: F811
     cfg, emb, client, _ = setup
     assert not isinstance(get_retriever(cfg, embedder=emb, client=client), AdvancedRetriever)
+
+
+def test_reranker_best_query_mode_uses_french_rewrite_only():
+    calls = []
+
+    class Spy(FakeCrossEncoder):
+        def predict(self, pairs, **kw):
+            calls.extend(q for q, _ in pairs)
+            return super().predict(pairs, **kw)
+
+    r = Reranker(RerankerConfig(query_mode="best"), model=Spy())
+    r.rerank(["قداش؟", "délai de réponse label", "أجل الرد"], [sc("a", "délai de réponse"), sc("b", "x")], top_k=2)
+    assert set(calls) == {"délai de réponse label"} and len(calls) == 2

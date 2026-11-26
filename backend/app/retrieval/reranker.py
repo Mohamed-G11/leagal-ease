@@ -16,11 +16,12 @@ class Reranker:
     def __init__(self, cfg: RerankerConfig, model=None):
         self.cfg = cfg
         if model is None:
-            if cfg.model not in _CACHE:
+            key = f"{cfg.model}|{cfg.max_length}|{cfg.device}"
+            if key not in _CACHE:
                 from sentence_transformers import CrossEncoder
 
-                _CACHE[cfg.model] = CrossEncoder(cfg.model, max_length=1024)
-            model = _CACHE[cfg.model]
+                _CACHE[key] = CrossEncoder(cfg.model, max_length=cfg.max_length, device=cfg.device)
+            model = _CACHE[key]
         self.model = model
 
     def score(self, queries: list[str], chunks: list[ScoredChunk]) -> list[float]:
@@ -35,7 +36,13 @@ class Reranker:
         n = len(chunks)
         return [max(probs[i + j * n] for j in range(len(queries))) for i in range(n)]
 
+    def select_queries(self, queries: list[str]) -> list[str]:
+        """query_mode "best": queries = [original, fr, ar] from the transformer -> keep the French rewrite."""
+        if self.cfg.query_mode == "best" and len(queries) > 1:
+            return [queries[1]]
+        return queries
+
     def rerank(self, queries: list[str], chunks: list[ScoredChunk], top_k: int) -> list[ScoredChunk]:
-        scores = self.score(queries, chunks)
+        scores = self.score(self.select_queries(queries), chunks)
         ranked = sorted(zip(chunks, scores, strict=True), key=lambda x: x[1], reverse=True)
         return [ScoredChunk(chunk=sc.chunk, score=s) for sc, s in ranked[:top_k]]

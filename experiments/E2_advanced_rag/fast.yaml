@@ -1,0 +1,42 @@
+# E2 fast — same bricks as E2_advanced_rag, tuned for CPU latency
+name: E2_advanced_fast
+
+embedding:
+  model: BAAI/bge-m3
+  batch_size: 16
+
+qdrant:
+  path: ./qdrant_local
+  collection: legalease_e1
+
+chunking:
+  max_tokens: 500
+  overlap_tokens: 50
+
+retrieval:
+  mode: hybrid
+  top_k: 5
+  prefetch_k: 20
+  bm25: {k1: 1.2, b: 0.75, avg_len: 256}
+
+query_transform:
+  enabled: true
+  model: openai/gpt-oss-20b
+
+reranker:
+  enabled: true
+  model: BAAI/bge-reranker-v2-m3
+  candidates_k: 10      # was 20
+  max_length: 512       # was 1024
+  query_mode: best      # rerank with the French rewrite only (1 pass instead of 3)
+
+compression:
+  enabled: true
+  min_score: 0.05
+  keep_at_least: 1
+
+llm:
+  provider: groq
+  model: openai/gpt-oss-120b
+  temperature: 0.0
+  max_tokens: 2048

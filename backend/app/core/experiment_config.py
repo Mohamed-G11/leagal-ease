@@ -59,6 +59,11 @@ class RerankerConfig(BaseModel):
     model: str = "BAAI/bge-reranker-v2-m3"
     candidates_k: int = 20  # pool size given to the reranker
     batch_size: int = 16
+    max_length: int = 1024  # tokens per (question, chunk) pair; 512 is ~2x faster, chunks are ~500 tokens
+    # which question variants the reranker reads: "all" (original + rewrites) or "best"
+    # (French rewrite if any, else the original) -> 1 pass instead of 3 when rewriting is on
+    query_mode: Literal["all", "best"] = "all"
+    device: str | None = None  # "cuda" if a GPU is available, else auto
 
 
 class CompressionConfig(BaseModel):
