@@ -36,6 +36,10 @@ uvicorn app.main:app --reload
 `DATABASE_URL` must start with `postgresql+psycopg2://`. SQLAlchemy 2.1 maps a plain `postgresql://` to psycopg v3,
 which is not installed.
 
+Docker publishes PostgreSQL on port **5433**, so it does not clash with a PostgreSQL installed on your machine
+(which usually holds 5432). If you already have a `.env`, change the port in `DATABASE_URL` to 5433 and run
+`docker compose up -d` again to recreate the container.
+
 ### RAG pipeline
 
 The API loads the pipeline in the background at startup. `GET /health` shows its progress.
