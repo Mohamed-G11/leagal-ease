@@ -46,12 +46,42 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2048
 
 
+class QueryTransformConfig(BaseModel):
+    """E2: rewrite the question (darija -> MSA/French legal wording) and search with every variant."""
+    enabled: bool = False
+    model: str = "openai/gpt-oss-20b"  # small and fast: called once per question
+    max_tokens: int = 1024
+
+
+class RerankerConfig(BaseModel):
+    """E2: cross-encoder re-scores (question, chunk) pairs taken from a wider candidate pool."""
+    enabled: bool = False
+    model: str = "BAAI/bge-reranker-v2-m3"
+    candidates_k: int = 20  # pool size given to the reranker
+    batch_size: int = 16
+    max_length: int = 1024  # tokens per (question, chunk) pair; 512 is ~2x faster, chunks are ~500 tokens
+    # which question variants the reranker reads: "all" (original + rewrites) or "best"
+    # (French rewrite if any, else the original) -> 1 pass instead of 3 when rewriting is on
+    query_mode: Literal["all", "best"] = "all"
+    device: str | None = None  # "cuda" if a GPU is available, else auto
+
+
+class CompressionConfig(BaseModel):
+    """E2: drop chunks the reranker finds irrelevant before they reach the LLM."""
+    enabled: bool = False
+    min_score: float = 0.05  # reranker probability below which a chunk is dropped
+    keep_at_least: int = 1  # never send an empty context because of the threshold
+
+
 class ExperimentConfig(BaseModel):
     name: str = "E0_naive_rag"
     embedding: EmbeddingConfig = EmbeddingConfig()
     qdrant: QdrantConfig = QdrantConfig()
     chunking: ChunkingConfig = ChunkingConfig()
     retrieval: RetrievalConfig = RetrievalConfig()
+    query_transform: QueryTransformConfig = QueryTransformConfig()
+    reranker: RerankerConfig = RerankerConfig()
+    compression: CompressionConfig = CompressionConfig()
     llm: LLMConfig = LLMConfig()
 
 

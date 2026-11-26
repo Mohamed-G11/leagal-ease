@@ -64,8 +64,8 @@ class HybridRetriever:
         return _to_scored(result.points)
 
 
-def get_retriever(cfg: ExperimentConfig, embedder=None, client=None):
-    """Pick the retriever from config: retrieval.mode = dense | sparse | hybrid."""
+def get_base_retriever(cfg: ExperimentConfig, embedder=None, client=None):
+    """retrieval.mode = dense | sparse | hybrid."""
     mode = cfg.retrieval.mode
     if mode == "sparse":
         return SparseRetriever(cfg, client=client)
@@ -74,3 +74,23 @@ def get_retriever(cfg: ExperimentConfig, embedder=None, client=None):
     from app.retrieval.dense import DenseRetriever
 
     return DenseRetriever(cfg, embedder=embedder, client=client)
+
+
+def get_retriever(cfg: ExperimentConfig, embedder=None, client=None, transformer=None, reranker=None):
+    """Base retriever (E0/E1), wrapped by the E2 bricks that are enabled in the config."""
+    base = get_base_retriever(cfg, embedder=embedder, client=client)
+    if not (cfg.query_transform.enabled or cfg.reranker.enabled):
+        return base
+    from app.retrieval.advanced import AdvancedRetriever
+
+    if cfg.query_transform.enabled and transformer is None:
+        from app.retrieval.query_transform import QueryTransformer
+        transformer = QueryTransformer(cfg.query_transform)
+    if cfg.reranker.enabled and reranker is None:
+        from app.retrieval.reranker import Reranker
+        reranker = Reranker(cfg.reranker)
+    return AdvancedRetriever(
+        cfg, base,
+        transformer=transformer if cfg.query_transform.enabled else None,
+        reranker=reranker if cfg.reranker.enabled else None,
+    )
