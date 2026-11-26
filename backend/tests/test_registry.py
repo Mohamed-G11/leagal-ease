@@ -70,3 +70,13 @@ def test_register_load_predict_and_promote(tmp_path, monkeypatch):
     assert not pr.promote(v3, client).promote
     assert str(client.get_model_version_by_alias(pr.MODEL_NAME, "challenger").version) == v3
     assert client.get_model_version(pr.MODEL_NAME, v3).tags["promotion_decision"] == "rejected"
+
+
+def test_model_code_excludes_legacy_and_heavy_files(tmp_path):
+    from app.registry.register import build_code_dir
+
+    pkg = build_code_dir(tmp_path)
+    files = {p.relative_to(pkg).as_posix() for p in pkg.rglob("*") if p.is_file()}
+    assert "pipeline.py" in files and "core/schemas.py" in files and "retrieval/hybrid.py" in files
+    assert not any(f.startswith(("rag/", "v1/", "api/")) for f in files)
+    assert "core/config.py" not in files and not any(f.endswith((".pdf", ".db", ".pyc")) for f in files)

@@ -5,6 +5,8 @@ registered version is linked to the run that holds its parameters and metrics.
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
 import mlflow
@@ -12,7 +14,32 @@ import mlflow
 from app.core.experiment_config import ExperimentConfig
 from app.registry.promote import MODEL_NAME
 
-APP_DIR = Path(__file__).resolve().parents[1]  # backend/app, shipped with the model
+APP_DIR = Path(__file__).resolve().parents[1]  # backend/app
+
+# Only the packages the pipeline needs travel with the model: no legacy app/rag (PDFs, Chroma),
+# no API, no database code, no caches.
+MODEL_PACKAGES = ["core", "ingestion", "retrieval", "generation", "registry"]
+MODEL_FILES = ["__init__.py", "pipeline.py"]
+CORE_FILES = ["__init__.py", "schemas.py", "experiment_config.py"]  # not core/config.py (app settings)
+
+
+def build_code_dir(dest: Path) -> Path:
+    """Copy a minimal `app` package into dest and return its path (passed to code_paths)."""
+    pkg = dest / "app"
+    pkg.mkdir(parents=True)
+    for name in MODEL_FILES:
+        if (APP_DIR / name).exists():
+            shutil.copy2(APP_DIR / name, pkg / name)
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pdf", "*.db")
+    for name in MODEL_PACKAGES:
+        if name == "core":
+            (pkg / "core").mkdir()
+            for f in CORE_FILES:
+                if (APP_DIR / "core" / f).exists():
+                    shutil.copy2(APP_DIR / "core" / f, pkg / "core" / f)
+        elif (APP_DIR / name).is_dir():
+            shutil.copytree(APP_DIR / name, pkg / name, ignore=ignore)
+    return pkg
 
 PIP_REQUIREMENTS = [
     "mlflow", "pydantic>=2", "pyyaml", "pymupdf", "qdrant-client", "sentence-transformers", "groq", "numpy",
@@ -23,14 +50,15 @@ def register_pipeline(cfg: ExperimentConfig, config_path: Path, metrics: dict[st
     """Must run inside an active MLflow run. Returns the new model version number."""
     from app.registry.pyfunc_model import LegalEaseRAGModel
 
-    info = mlflow.pyfunc.log_model(
-        name="rag_pipeline",
-        python_model=LegalEaseRAGModel(),
-        artifacts={"config": str(config_path)},
-        code_paths=[str(APP_DIR)],
-        pip_requirements=PIP_REQUIREMENTS,
-        registered_model_name=MODEL_NAME,
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        info = mlflow.pyfunc.log_model(
+            name="rag_pipeline",
+            python_model=LegalEaseRAGModel(),
+            artifacts={"config": str(config_path)},
+            code_paths=[str(build_code_dir(Path(tmp)))],
+            pip_requirements=PIP_REQUIREMENTS,
+            registered_model_name=MODEL_NAME,
+        )
     version = str(info.registered_model_version)
 
     client = mlflow.tracking.MlflowClient()
