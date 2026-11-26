@@ -239,7 +239,13 @@ export default function AIChatWidget() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok()}` },
         body: JSON.stringify({ message: q, conversation_id: convId }),
       });
-      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || `Error ${resp.status}`);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        // A failed exchange is still saved: stay in that conversation so a retry continues it.
+        const failedId = body.error?.details?.conversation_id;
+        if (failedId) { setConvId(failedId); refreshConvs(); }
+        throw new Error(body.error?.message || body.detail || `Error ${resp.status}`);
+      }
 
       const reader = resp.body!.getReader();
       const dec    = new TextDecoder();

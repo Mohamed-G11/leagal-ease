@@ -33,10 +33,42 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+After pulling, run `alembic upgrade head` from `backend/`.
+
 `DATABASE_URL` must start with `postgresql+psycopg2://`. SQLAlchemy 2.1 maps a plain `postgresql://` to psycopg v3,
 which is not installed.
 
-The RAG endpoints are being migrated from Chroma to Qdrant. Until then the chat endpoint answers with HTTP 503.
+Docker publishes PostgreSQL on port **5433**, so it does not clash with a PostgreSQL installed on your machine
+(which usually holds 5432). If you already have a `.env`, change the port in `DATABASE_URL` to 5433 and run
+`docker compose up -d` again to recreate the container.
+
+### RAG pipeline
+
+The API loads the pipeline in the background at startup. `GET /health` shows its progress.
+
+- `RAG_CONFIG` selects the experiment config, relative to the repo root. The default is
+  `experiments/E1_hybrid_rag/config.yaml` (hybrid retrieval).
+- The app should use the Docker Qdrant: set `QDRANT_URL=http://localhost:6333` in `.env`. Without it, Qdrant runs
+  in local mode, in a `qdrant_local/` folder under the directory you start from.
+- The collection must be ingested **into that server**. An index built in local mode (`qdrant_local/`) is not
+  visible to it. The ingestion command does not read `.env`, so set `QDRANT_URL` in the shell first:
+
+```bash
+cd backend
+export QDRANT_URL=http://localhost:6333      # PowerShell: $env:QDRANT_URL = "http://localhost:6333"
+python -m app.ingestion.temp_ingest --pdf-dir ../data/raw --config ../experiments/E1_hybrid_rag/config.yaml
+```
+
+
+### Chat API
+
+Swagger UI is at `http://localhost:8000/docs`. Both endpoints need a login token and use the same pipeline:
+
+- `POST /api/v1/chat` returns the whole answer as JSON, with citations.
+- `POST /api/v1/ai/chat/stream` sends it as server-sent events (used by the chat widget).
+
+Each question is answered on its own: the conversation history is saved but not sent to the model. Until the
+pipeline and the index are ready, both return HTTP 503.
 
 ## Checks
 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     GROQ_API_KEY: str = ""
+    RAG_CONFIG: str = "experiments/E1_hybrid_rag/config.yaml"  # relative to the repo root
     RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
     model_config = SettingsConfigDict(

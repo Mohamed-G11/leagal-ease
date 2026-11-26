@@ -6,13 +6,17 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import health
 from app.core.database import SessionLocal
+from app.core.errors import register_error_handlers
 from app.crud.notification import check_deadlines
+from app.services.rag import rag_service
 from app.v1.endpoints import (
     admin,
     ai,
     analytics,
     auth,
+    chat,
     collaboration,
     documents,
     feedback,
@@ -39,11 +43,13 @@ scheduler.add_job(run_deadline_check, trigger="cron", hour=8, minute=0,
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler.start()
+    rag_service.start()
     yield
     scheduler.shutdown()
 
 
 app = FastAPI(title="LegalEase Tunisia API", lifespan=lifespan)
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,12 +61,14 @@ app.add_middleware(
 
 Path("uploads").mkdir(exist_ok=True)
 
+app.include_router(health.router)
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(procedure.router,     prefix="/api/v1")
 app.include_router(documents.router,     prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(admin.router,         prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
@@ -79,16 +87,3 @@ async def log_requests(request, call_next):
     print(f"  {request.method} {request.url.path}")
     response = await call_next(request)
     return response
-
-@app.get("/api/v1/test-email")
-def test_email():
-    from app.services.email import send_deadline_reminder
-    send_deadline_reminder(
-        to_email       = "ghouiliwiem013@gmail.com",  # ← ton email
-        username       = "Test",
-        step_title     = "Inscription RNE",
-        procedure_name = "Création d'entreprise",
-        days_remaining = 3,
-        due_date       = "2026-05-15",
-    )
-    return {"status": "sent"}
