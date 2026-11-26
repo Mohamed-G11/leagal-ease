@@ -1,24 +1,24 @@
 # app/v1/endpoints/feedback.py
 # Add this router to ai.py or register separately in main.py
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models.user import User
 from app.models.analytics import AIFeedback
+from app.models.user import User
 
 router = APIRouter(prefix="/ai/feedback", tags=["AI Feedback"])
 
 
 class FeedbackRequest(BaseModel):
     rating:          str            # "up" or "down"
-    question:        Optional[str]  = None
-    answer:          Optional[str]  = None
-    conversation_id: Optional[int]  = None
-    message_index:   Optional[int]  = None
+    question:        str | None  = None
+    answer:          str | None  = None
+    conversation_id: int | None  = None
+    message_index:   int | None  = None
 
 
 @router.post("")

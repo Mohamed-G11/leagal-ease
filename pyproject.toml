@@ -1,0 +1,23 @@
+[project]
+name = "legalease-rag"
+version = "0.1.0"
+description = "RAG assistant for Tunisian legal texts (FastAPI, Qdrant, PostgreSQL, Groq)"
+requires-python = ">=3.11,<3.12"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["frontend", "backend/alembic/versions"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear
+select = ["E", "F", "I", "UP", "B", "W"]
+# B008: FastAPI uses Depends()/Query() calls in argument defaults by design.
+ignore = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]

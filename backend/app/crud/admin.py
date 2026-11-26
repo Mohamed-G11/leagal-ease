@@ -1,30 +1,41 @@
 # app/crud/admin.py  (updated — full BI analytics)
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Optional
-from datetime import timezone, datetime
 from collections import defaultdict
+from datetime import UTC, datetime
 
-from app.models.user import User
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.models.procedure import (
-    UserProcedure, UserStepProgress, ProcedureType,
-    ProcedureStep, StepDocument, StepStatus,
+    ProcedureStep,
+    ProcedureType,
+    StepDocument,
+    StepStatus,
+    UserProcedure,
+    UserStepProgress,
 )
+from app.models.user import User
 from app.schemas.admin import (
-    AdminUpdateUser, GlobalStats, ProcedureTypeStat, StepStat,
-    AdminProcedureTypeCreate, AdminProcedureTypeUpdate,
-    AdminStepCreate, AdminStepUpdate,
-    TimeSeriesPoint, StepFunnelItem, DocumentTypeStat,
-    UserActivityStat, StatusDistribution,
+    AdminProcedureTypeCreate,
+    AdminProcedureTypeUpdate,
+    AdminStepCreate,
+    AdminStepUpdate,
+    AdminUpdateUser,
+    DocumentTypeStat,
+    GlobalStats,
+    ProcedureTypeStat,
+    StatusDistribution,
+    StepFunnelItem,
+    StepStat,
+    TimeSeriesPoint,
+    UserActivityStat,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _to_utc(dt: datetime) -> datetime:
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 def _month_label(dt: datetime) -> str:
@@ -33,8 +44,10 @@ def _month_label(dt: datetime) -> str:
 
 
 def _doc_label(ct: str) -> str:
-    if ct == 'application/pdf':                                          return 'PDF'
-    if ct in ('image/png','image/jpeg','image/jpg','image/webp'):       return 'Image'
+    if ct == 'application/pdf':
+        return 'PDF'
+    if ct in ('image/png','image/jpeg','image/jpg','image/webp'):
+        return 'Image'
     if ct in ('application/msword',
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'):
                                                                          return 'Word'
@@ -43,15 +56,15 @@ def _doc_label(ct: str) -> str:
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
-def list_users(db: Session, skip: int = 0, limit: int = 50) -> List[User]:
+def list_users(db: Session, skip: int = 0, limit: int = 50) -> list[User]:
     return db.query(User).order_by(User.created_at.desc()).offset(skip).limit(limit).all()
 
 
-def get_user(db: Session, user_id: int) -> Optional[User]:
+def get_user(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def update_user(db: Session, user_id: int, data: AdminUpdateUser) -> Optional[User]:
+def update_user(db: Session, user_id: int, data: AdminUpdateUser) -> User | None:
     user = get_user(db, user_id)
     if not user:
         return None
@@ -76,20 +89,23 @@ def create_procedure_type(db: Session, data: AdminProcedureTypeCreate) -> Proced
         name=data.name, description=data.description,
         icon=data.icon, estimated_days=data.estimated_days,
     )
-    db.add(pt); db.flush()
+    db.add(pt)
+    db.flush()
     for s in steps_data:
         db.add(ProcedureStep(procedure_type_id=pt.id, **s.model_dump()))
-    db.commit(); db.refresh(pt)
+    db.commit()
+    db.refresh(pt)
     return pt
 
 
-def update_procedure_type(db: Session, type_id: int, data: AdminProcedureTypeUpdate) -> Optional[ProcedureType]:
+def update_procedure_type(db: Session, type_id: int, data: AdminProcedureTypeUpdate) -> ProcedureType | None:
     pt = db.query(ProcedureType).filter(ProcedureType.id == type_id).first()
     if not pt:
         return None
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(pt, field, value)
-    db.commit(); db.refresh(pt)
+    db.commit()
+    db.refresh(pt)
     return pt
 
 
@@ -97,25 +113,29 @@ def delete_procedure_type(db: Session, type_id: int) -> bool:
     pt = db.query(ProcedureType).filter(ProcedureType.id == type_id).first()
     if not pt:
         return False
-    db.delete(pt); db.commit()
+    db.delete(pt)
+    db.commit()
     return True
 
 
-def add_step(db: Session, type_id: int, data: AdminStepCreate) -> Optional[ProcedureStep]:
+def add_step(db: Session, type_id: int, data: AdminStepCreate) -> ProcedureStep | None:
     if not db.query(ProcedureType).filter(ProcedureType.id == type_id).first():
         return None
     step = ProcedureStep(procedure_type_id=type_id, **data.model_dump())
-    db.add(step); db.commit(); db.refresh(step)
+    db.add(step)
+    db.commit()
+    db.refresh(step)
     return step
 
 
-def update_step(db: Session, step_id: int, data: AdminStepUpdate) -> Optional[ProcedureStep]:
+def update_step(db: Session, step_id: int, data: AdminStepUpdate) -> ProcedureStep | None:
     step = db.query(ProcedureStep).filter(ProcedureStep.id == step_id).first()
     if not step:
         return None
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(step, field, value)
-    db.commit(); db.refresh(step)
+    db.commit()
+    db.refresh(step)
     return step
 
 
@@ -123,15 +143,16 @@ def delete_step(db: Session, step_id: int) -> bool:
     step = db.query(ProcedureStep).filter(ProcedureStep.id == step_id).first()
     if not step:
         return False
-    db.delete(step); db.commit()
+    db.delete(step)
+    db.commit()
     return True
 
 
 # ── BI: time-series ───────────────────────────────────────────────────────────
 
-def _time_series_last_6_months(rows: list, date_attr: str) -> List[TimeSeriesPoint]:
+def _time_series_last_6_months(rows: list, date_attr: str) -> list[TimeSeriesPoint]:
     """Group any list of ORM objects by month (last 6 months)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     buckets: dict = {}
     for i in range(5, -1, -1):
         from datetime import timedelta
@@ -152,7 +173,7 @@ def _time_series_last_6_months(rows: list, date_attr: str) -> List[TimeSeriesPoi
 
 # ── BI: step funnel ───────────────────────────────────────────────────────────
 
-def _compute_funnels(db: Session) -> List[StepFunnelItem]:
+def _compute_funnels(db: Session) -> list[StepFunnelItem]:
     rows = (
         db.query(UserStepProgress, ProcedureStep)
         .join(ProcedureStep, UserStepProgress.step_id == ProcedureStep.id)
@@ -171,10 +192,14 @@ def _compute_funnels(db: Session) -> List[StepFunnelItem]:
                 'pending': 0, 'in_progress': 0,
             }
         agg[sid]['total'] += 1
-        if progress.status == StepStatus.completed:   agg[sid]['completed']   += 1
-        elif progress.status == StepStatus.blocked:   agg[sid]['blocked']     += 1
-        elif progress.status == StepStatus.pending:   agg[sid]['pending']     += 1
-        elif progress.status == StepStatus.in_progress: agg[sid]['in_progress'] += 1
+        if progress.status == StepStatus.completed:
+            agg[sid]['completed']   += 1
+        elif progress.status == StepStatus.blocked:
+            agg[sid]['blocked']     += 1
+        elif progress.status == StepStatus.pending:
+            agg[sid]['pending']     += 1
+        elif progress.status == StepStatus.in_progress:
+            agg[sid]['in_progress'] += 1
 
     result = []
     for item in sorted(agg.values(), key=lambda x: x['step_order']):
@@ -194,7 +219,7 @@ def _compute_funnels(db: Session) -> List[StepFunnelItem]:
 
 # ── BI: document types ────────────────────────────────────────────────────────
 
-def _compute_doc_stats(db: Session) -> List[DocumentTypeStat]:
+def _compute_doc_stats(db: Session) -> list[DocumentTypeStat]:
     docs = db.query(StepDocument).all()
     total = len(docs)
     if total == 0:
@@ -217,8 +242,8 @@ def _compute_doc_stats(db: Session) -> List[DocumentTypeStat]:
 
 # ── BI: top users ─────────────────────────────────────────────────────────────
 
-def _compute_top_users(db: Session, limit: int = 8) -> List[UserActivityStat]:
-    users = db.query(User).filter(User.is_active == True).all()
+def _compute_top_users(db: Session, limit: int = 8) -> list[UserActivityStat]:
+    users = db.query(User).filter(User.is_active.is_(True)).all()
     stats = []
     for u in users:
         procs = db.query(UserProcedure).filter(UserProcedure.user_id == u.id).all()
@@ -292,7 +317,7 @@ def _compute_status_distribution(db: Session) -> StatusDistribution:
 def get_global_stats(db: Session) -> GlobalStats:
     # ── KPIs ──
     total_users          = db.query(func.count(User.id)).scalar() or 0
-    active_users         = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
+    active_users         = db.query(func.count(User.id)).filter(User.is_active.is_(True)).scalar() or 0
     total_procedures     = db.query(func.count(UserProcedure.id)).scalar() or 0
     completed_procedures = (
         db.query(func.count(UserProcedure.id))
@@ -367,8 +392,10 @@ def get_global_stats(db: Session) -> GlobalStats:
                 agg[step.id] = {'step_title': step.title, 'procedure_type': proc_type.name,
                                 'total': 0, 'completed': 0, 'blocked': 0}
             agg[step.id]['total'] += 1
-            if progress.status == StepStatus.completed: agg[step.id]['completed'] += 1
-            elif progress.status == StepStatus.blocked:  agg[step.id]['blocked']   += 1
+            if progress.status == StepStatus.completed:
+                agg[step.id]['completed'] += 1
+            elif progress.status == StepStatus.blocked:
+                agg[step.id]['blocked']   += 1
 
         top5 = sorted(agg.values(), key=lambda x: x['blocked'], reverse=True)[:5]
         most_blocked = [StepStat(**s) for s in top5]

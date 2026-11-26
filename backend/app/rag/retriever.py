@@ -1,13 +1,24 @@
 # app/rag/retriever.py
 # Retrieves relevant documents from ChromaDB for a given question
+#
+# STOPGAP: chromadb is no longer a dependency (Qdrant replaces it, see tasks W2/W3).
+# It is imported lazily in get_collection() so the app can start without it.
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
+
 from sentence_transformers import SentenceTransformer
-import chromadb
-from typing import Optional
+
+if TYPE_CHECKING:
+    import chromadb
 
 EMBED_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 CHROMA_DIR  = Path(__file__).parent / "chroma_db"
+
+
+class RagBackendUnavailable(RuntimeError):
+    """The vector store backend is not installed or not available."""
 
 # Language mapping — darija → search in French docs
 LANG_MAP = {
@@ -19,9 +30,9 @@ LANG_MAP = {
 }
 
 # Singleton — load once at startup
-_model:      Optional[SentenceTransformer] = None
-_client:     Optional[chromadb.PersistentClient] = None
-_collection: Optional[chromadb.Collection] = None
+_model:      SentenceTransformer | None = None
+_client:     chromadb.PersistentClient | None = None
+_collection: chromadb.Collection | None = None
 
 
 def get_model() -> SentenceTransformer:
@@ -36,6 +47,13 @@ def get_model() -> SentenceTransformer:
 def get_collection() -> chromadb.Collection:
     global _client, _collection
     if _collection is None:
+        try:
+            import chromadb
+        except ImportError as exc:
+            raise RagBackendUnavailable(
+                "Vector store unavailable: chromadb is not installed "
+                "(RAG is being migrated to Qdrant)."
+            ) from exc
         if not CHROMA_DIR.exists():
             raise RuntimeError(
                 "ChromaDB not found. Run: python -m app.rag.ingest"
@@ -90,6 +108,7 @@ def retrieve(question: str, lang: str = "auto", top_k: int = 5) -> list:
         results["documents"][0],
         results["metadatas"][0],
         results["distances"][0],
+        strict=False,
     ):
         # Convert cosine distance to similarity score (0→1)
         score = round(1 - dist, 4)

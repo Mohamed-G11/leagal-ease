@@ -1,12 +1,14 @@
 # app/models/procedure.py  (updated — adds due_date on UserStepProgress)
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Text, BigInteger
+import enum
+
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.core.database import Base
 
 
-class StepStatus(str, enum.Enum):
+class StepStatus(str, enum.Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     pending = "pending"
     in_progress = "in_progress"
     completed = "completed"
@@ -96,7 +98,7 @@ class StepDocument(Base):
 
 # ── Phase 4: in-app notifications ────────────────────────────────────────────
 
-class NotificationType(str, enum.Enum):
+class NotificationType(str, enum.Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     deadline_3days = "deadline_3days"   # due in 3 days
     deadline_today = "deadline_today"   # due today
     deadline_passed = "deadline_passed" # overdue

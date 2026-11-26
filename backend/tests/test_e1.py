@@ -1,7 +1,6 @@
 """E1 tests: BM25 tokenizer/encoder, sparse and hybrid retrieval (offline, fake embedder)."""
-from app.core.experiment_config import ExperimentConfig
-from app.retrieval.hybrid import HybridRetriever, SparseRetriever, get_retriever
 from app.retrieval.dense import DenseRetriever
+from app.retrieval.hybrid import HybridRetriever, SparseRetriever, get_retriever
 from app.retrieval.sparse import BM25Encoder, token_id, tokenize
 from tests.test_e0 import setup  # noqa: F401  (reuse the ingestion fixture)
 
@@ -16,7 +15,7 @@ def test_tokenize_normalizes_french_and_arabic():
 def test_bm25_vectors_are_stable_and_saturated():
     enc = BM25Encoder()
     v = enc.encode_document("registre registre registre entreprise")
-    w = dict(zip(v.indices, v.values))
+    w = dict(zip(v.indices, v.values, strict=False))
     assert w[token_id("registre")] > w[token_id("entreprise")]
     assert w[token_id("registre")] < 3 * w[token_id("entreprise")]  # tf saturation
     q = enc.encode_query("registre registre entreprise")

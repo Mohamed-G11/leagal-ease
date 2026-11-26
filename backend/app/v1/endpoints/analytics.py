@@ -3,18 +3,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.analytics.tracker import (
+    get_daily_stats,
+    get_keyword_stats,
+    get_language_stats,
+    get_overview,
+    get_procedure_stats,
+    get_recent_queries,
+    get_unanswered_queries,
+)
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.analytics.tracker import (
-    get_overview,
-    get_language_stats,
-    get_procedure_stats,
-    get_keyword_stats,
-    get_recent_queries,
-    get_unanswered_queries,
-    get_daily_stats,
-)
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 

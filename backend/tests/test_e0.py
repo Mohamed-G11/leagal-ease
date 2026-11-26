@@ -128,6 +128,7 @@ def test_helpers():
 
 def test_run_experiment_logs_to_mlflow(setup, tmp_path, monkeypatch):
     import mlflow
+
     from app.evaluation import run_experiment as rx
 
     cfg, emb, client, _ = setup

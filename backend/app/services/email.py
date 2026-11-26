@@ -2,6 +2,7 @@
 # Email service using Resend API
 # Sends deadline reminders and notifications to users
 import resend
+
 from app.core.config import settings
 
 
@@ -48,7 +49,8 @@ def send_deadline_reminder(
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF9F7;padding:40px 0;">
     <tr>
       <td align="center">
-        <table width="560" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <table width="560" cellpadding="0" cellspacing="0" \
+style="background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
           <!-- Header -->
           <tr>
@@ -61,7 +63,8 @@ def send_deadline_reminder(
                     </span>
                   </td>
                   <td align="right">
-                    <span style="font-size:11px;color:rgba(255,255,255,0.4);font-family:monospace;letter-spacing:1px;text-transform:uppercase;">
+                    <span \
+style="font-size:11px;color:rgba(255,255,255,0.4);font-family:monospace;letter-spacing:1px;text-transform:uppercase;">
                       Notification
                     </span>
                   </td>
@@ -73,7 +76,8 @@ def send_deadline_reminder(
           <!-- Body -->
           <tr>
             <td style="padding:36px 36px 28px;">
-              <p style="margin:0 0 6px;font-size:13px;color:#9C9A96;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">
+              <p style="margin:0 0 \
+6px;font-size:13px;color:#9C9A96;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">
                 Rappel d'échéance
               </p>
               <h1 style="margin:0 0 24px;font-size:24px;font-weight:700;color:#1A1916;line-height:1.2;">
@@ -86,13 +90,15 @@ def send_deadline_reminder(
               </p>
 
               <!-- Deadline card -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F4F1;border-radius:10px;border-left:4px solid {color};margin-bottom:28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" \
+style="background:#F5F4F1;border-radius:10px;border-left:4px solid {color};margin-bottom:28px;">
                 <tr>
                   <td style="padding:18px 20px;">
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td>
-                          <span style="font-size:13px;color:#9C9A96;font-family:monospace;text-transform:uppercase;letter-spacing:1px;">
+                          <span \
+style="font-size:13px;color:#9C9A96;font-family:monospace;text-transform:uppercase;letter-spacing:1px;">
                             Échéance
                           </span><br/>
                           <span style="font-size:20px;font-weight:700;color:{color};">
@@ -119,7 +125,8 @@ def send_deadline_reminder(
                 <tr>
                   <td style="background:#1C2B4A;border-radius:8px;">
                     <a href="https://legalease.tn/timeline"
-                       style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#FFFFFF;text-decoration:none;letter-spacing:0.3px;">
+                       style="display:inline-block;padding:12px \
+28px;font-size:14px;font-weight:600;color:#FFFFFF;text-decoration:none;letter-spacing:0.3px;">
                       Voir ma Timeline →
                     </a>
                   </td>
@@ -178,7 +185,8 @@ def send_welcome_email(to_email: str, username: str) -> bool:
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
     <tr>
       <td align="center">
-        <table width="560" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <table width="560" cellpadding="0" cellspacing="0" \
+style="background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
           <tr>
             <td style="background:#1C2B4A;padding:28px 36px;border-left:4px solid #C8102E;">
               <span style="font-size:22px;font-weight:700;color:#FFFFFF;">
@@ -192,13 +200,15 @@ def send_welcome_email(to_email: str, username: str) -> bool:
                 Bienvenue {username} ! 🎉
               </h1>
               <p style="margin:0 0 20px;font-size:15px;color:#6A6865;line-height:1.6;">
-                Votre compte LegalEase Tunisia est créé. Vous pouvez maintenant suivre vos procédures administratives étape par étape.
+                Votre compte LegalEase Tunisia est créé. Vous pouvez maintenant suivre vos procédures administratives \
+étape par étape.
               </p>
               <table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="background:#1C2B4A;border-radius:8px;">
                     <a href="https://legalease.tn/dashboard"
-                       style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#FFFFFF;text-decoration:none;">
+                       style="display:inline-block;padding:12px \
+28px;font-size:14px;font-weight:600;color:#FFFFFF;text-decoration:none;">
                       Accéder au Dashboard →
                     </a>
                   </td>

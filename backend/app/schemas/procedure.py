@@ -1,18 +1,18 @@
 # app/schemas/procedure.py  (updated — adds due_date + notification schemas)
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
+from pydantic import BaseModel
 
-class StepStatus(str, Enum):
+
+class StepStatus(str, Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     pending = "pending"
     in_progress = "in_progress"
     completed = "completed"
     blocked = "blocked"
 
 
-class NotificationType(str, Enum):
+class NotificationType(str, Enum):  # noqa: UP042 - keep (str, Enum): str()/format() output must not change
     deadline_3days = "deadline_3days"
     deadline_today = "deadline_today"
     deadline_passed = "deadline_passed"
@@ -39,9 +39,9 @@ class StepDocumentResponse(BaseModel):
 class ProcedureStepBase(BaseModel):
     order: int
     title: str
-    description: Optional[str] = None
-    documents_required: Optional[str] = None
-    estimated_days: Optional[int] = None
+    description: str | None = None
+    documents_required: str | None = None
+    estimated_days: int | None = None
 
 
 class ProcedureStepResponse(ProcedureStepBase):
@@ -57,10 +57,10 @@ class ProcedureStepResponse(ProcedureStepBase):
 class ProcedureTypeResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    estimated_days: Optional[int] = None
-    steps: List[ProcedureStepResponse] = []
+    description: str | None = None
+    icon: str | None = None
+    estimated_days: int | None = None
+    steps: list[ProcedureStepResponse] = []
 
     class Config:
         from_attributes = True
@@ -72,11 +72,11 @@ class UserStepProgressResponse(BaseModel):
     id: int
     step_id: int
     status: StepStatus
-    notes: Optional[str] = None
-    completed_at: Optional[datetime] = None
-    due_date: Optional[datetime] = None          # Phase 4
+    notes: str | None = None
+    completed_at: datetime | None = None
+    due_date: datetime | None = None          # Phase 4
     step: ProcedureStepResponse
-    documents: List[StepDocumentResponse] = []
+    documents: list[StepDocumentResponse] = []
 
     class Config:
         from_attributes = True
@@ -84,31 +84,31 @@ class UserStepProgressResponse(BaseModel):
 
 class UpdateStepStatus(BaseModel):
     status: StepStatus
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class UpdateStepDueDate(BaseModel):
-    due_date: Optional[datetime] = None          # null = clear the deadline
+    due_date: datetime | None = None          # null = clear the deadline
 
 
 # ── User procedure ────────────────────────────────────────────────────────────
 
 class StartProcedureRequest(BaseModel):
     procedure_type_id: int
-    title: Optional[str] = None
+    title: str | None = None
 
 
 class UserProcedureResponse(BaseModel):
     id: int
     procedure_type_id: int
-    title: Optional[str] = None
+    title: str | None = None
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     is_active: bool
     procedure_type: ProcedureTypeResponse
-    step_progress: List[UserStepProgressResponse] = []
-    completion_percentage: Optional[float] = None
-    current_step_order: Optional[int] = None
+    step_progress: list[UserStepProgressResponse] = []
+    completion_percentage: float | None = None
+    current_step_order: int | None = None
 
     class Config:
         from_attributes = True
@@ -122,7 +122,7 @@ class NotificationResponse(BaseModel):
     title: str
     message: str
     is_read: bool
-    user_procedure_id: Optional[int] = None
+    user_procedure_id: int | None = None
     created_at: datetime
 
     class Config:
@@ -133,4 +133,4 @@ class NotificationSummary(BaseModel):
     """Lightweight summary returned in the navbar badge."""
     total: int
     unread: int
-    items: List[NotificationResponse]
+    items: list[NotificationResponse]

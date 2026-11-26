@@ -2,11 +2,12 @@
 # Add this function to your existing notification.py
 # It replaces or extends the existing check_deadlines function
 
-from datetime import datetime, timedelta
+from datetime import datetime
+
 from sqlalchemy.orm import Session
-from app.models.procedure import UserStepProgress, UserProcedure
+
+from app.models.procedure import Notification, UserProcedure, UserStepProgress
 from app.models.user import User
-from app.models.procedure import Notification
 
 # Import email service
 try:
@@ -88,13 +89,13 @@ def check_deadlines(db: Session) -> int:
 def get_user_notifications(db: Session, user_id: int, unread_only: bool = False):
     query = db.query(Notification).filter(Notification.user_id == user_id)
     if unread_only:
-        query = query.filter(Notification.is_read == False)
+        query = query.filter(Notification.is_read.is_(False))
     return query.order_by(Notification.created_at.desc()).limit(50).all()
 
 def get_unread_count(db: Session, user_id: int) -> int:
     return db.query(Notification).filter(
         Notification.user_id == user_id,
-        Notification.is_read == False,
+        Notification.is_read.is_(False),
     ).count()
 
 def mark_read(db: Session, notif_id: int, user_id: int) -> bool:
@@ -111,7 +112,7 @@ def mark_read(db: Session, notif_id: int, user_id: int) -> bool:
 def mark_all_read(db: Session, user_id: int) -> int:
     count = db.query(Notification).filter(
         Notification.user_id == user_id,
-        Notification.is_read == False,
+        Notification.is_read.is_(False),
     ).update({"is_read": True})
     db.commit()
     return count
@@ -123,7 +124,7 @@ def notify_step_completed(
 ) -> None:
     notif = Notification(
         user_id          = user_id,
-        title            = f'Step completed',
+        title            = 'Step completed',
         message          = f'✅ Step "{step_title}" completed!',
         type             = "step_completed",
         user_procedure_id = procedure_id,
@@ -140,7 +141,7 @@ def notify_procedure_done(
 ) -> None:
     notif = Notification(
         user_id          = user_id,
-        title            = f'Procedure completed',
+        title            = 'Procedure completed',
         message          = f'🎉 Procedure "{procedure_title}" is fully completed!',
         type             = "procedure_completed",
         user_procedure_id = procedure_id,

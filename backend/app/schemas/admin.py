@@ -1,8 +1,7 @@
 # app/schemas/admin.py  (updated — rich BI schemas)
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
 
+from pydantic import BaseModel
 
 # ── User management ───────────────────────────────────────────────────────────
 
@@ -20,8 +19,8 @@ class AdminUserResponse(BaseModel):
 
 
 class AdminUpdateUser(BaseModel):
-    is_active: Optional[bool] = None
-    is_admin: Optional[bool] = None
+    is_active: bool | None = None
+    is_admin: bool | None = None
 
 
 # ── Procedure type management ─────────────────────────────────────────────────
@@ -29,32 +28,32 @@ class AdminUpdateUser(BaseModel):
 class AdminStepCreate(BaseModel):
     order: int
     title: str
-    description: Optional[str] = None
-    documents_required: Optional[str] = None
-    estimated_days: Optional[int] = None
+    description: str | None = None
+    documents_required: str | None = None
+    estimated_days: int | None = None
 
 
 class AdminStepUpdate(BaseModel):
-    order: Optional[int] = None
-    title: Optional[str] = None
-    description: Optional[str] = None
-    documents_required: Optional[str] = None
-    estimated_days: Optional[int] = None
+    order: int | None = None
+    title: str | None = None
+    description: str | None = None
+    documents_required: str | None = None
+    estimated_days: int | None = None
 
 
 class AdminProcedureTypeCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    estimated_days: Optional[int] = None
-    steps: List[AdminStepCreate] = []
+    description: str | None = None
+    icon: str | None = None
+    estimated_days: int | None = None
+    steps: list[AdminStepCreate] = []
 
 
 class AdminProcedureTypeUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    estimated_days: Optional[int] = None
+    name: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    estimated_days: int | None = None
 
 
 # ── BI schemas ────────────────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ class UserActivityStat(BaseModel):
     completed_count: int
     total_steps_done: int
     total_docs_uploaded: int
-    last_active: Optional[datetime] = None
+    last_active: datetime | None = None
 
 
 class StepStat(BaseModel):
@@ -97,7 +96,7 @@ class StepStat(BaseModel):
     total: int
     completed: int
     blocked: int
-    avg_days_to_complete: Optional[float] = None
+    avg_days_to_complete: float | None = None
 
 
 class ProcedureTypeStat(BaseModel):
@@ -106,7 +105,7 @@ class ProcedureTypeStat(BaseModel):
     total_started: int
     total_completed: int
     avg_completion_pct: float
-    avg_days_to_complete: Optional[float] = None
+    avg_days_to_complete: float | None = None
 
 
 class StatusDistribution(BaseModel):
@@ -124,16 +123,16 @@ class GlobalStats(BaseModel):
     completed_procedures: int
     total_documents_uploaded: int
     completion_rate: float
-    avg_days_to_complete: Optional[float] = None
+    avg_days_to_complete: float | None = None
 
     # ── Existing ──
-    procedure_type_stats: List[ProcedureTypeStat]
-    most_blocked_steps: List[StepStat]
+    procedure_type_stats: list[ProcedureTypeStat]
+    most_blocked_steps: list[StepStat]
 
     # ── BI ──
-    users_over_time: List[TimeSeriesPoint]
-    procedures_over_time: List[TimeSeriesPoint]
-    step_funnels: List[StepFunnelItem]          # flat list, frontend groups by type
-    document_type_stats: List[DocumentTypeStat]
-    top_users: List[UserActivityStat]
+    users_over_time: list[TimeSeriesPoint]
+    procedures_over_time: list[TimeSeriesPoint]
+    step_funnels: list[StepFunnelItem]          # flat list, frontend groups by type
+    document_type_stats: list[DocumentTypeStat]
+    top_users: list[UserActivityStat]
     status_distribution: StatusDistribution

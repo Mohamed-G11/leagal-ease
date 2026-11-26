@@ -1,9 +1,10 @@
 # app/analytics/tracker.py
 # Adapted from colleague's analytics/tracker.py — persisted to PostgreSQL
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
 from collections import defaultdict
-from typing import Optional
+
+from sqlalchemy import desc, func
+from sqlalchemy.orm import Session
+
 from app.models.analytics import AIQueryLog
 
 
@@ -12,9 +13,9 @@ def log_query(
     question: str,
     lang: str,
     docs_found: int,
-    category: Optional[str],
+    category: str | None,
     answered: bool,
-    user_id: Optional[int] = None,
+    user_id: int | None = None,
     endpoint: str = "stream",
 ) -> None:
     """Log every AI query to DB for analytics."""
@@ -34,7 +35,7 @@ def log_query(
 def get_overview(db: Session) -> dict:
     """General stats — adapted from colleague's get_overview()."""
     total    = db.query(func.count(AIQueryLog.id)).scalar() or 0
-    answered = db.query(func.count(AIQueryLog.id)).filter(AIQueryLog.answered == True).scalar() or 0
+    answered = db.query(func.count(AIQueryLog.id)).filter(AIQueryLog.answered.is_(True)).scalar() or 0
 
     return {
         "total_queries":      total,
@@ -110,7 +111,7 @@ def get_unanswered_queries(db: Session, limit: int = 20) -> list:
     """Queries the RAG couldn't answer — useful to detect dataset gaps."""
     rows = (
         db.query(AIQueryLog)
-        .filter(AIQueryLog.answered == False)
+        .filter(AIQueryLog.answered.is_(False))
         .order_by(desc(AIQueryLog.created_at))
         .limit(limit)
         .all()
@@ -127,7 +128,7 @@ def get_unanswered_queries(db: Session, limit: int = 20) -> list:
 
 def get_daily_stats(db: Session, days: int = 7) -> list:
     """Queries per day for the last N days."""
-    from sqlalchemy import cast, Date
+    from sqlalchemy import Date, cast
     rows = (
         db.query(
             cast(AIQueryLog.created_at, Date).label("day"),

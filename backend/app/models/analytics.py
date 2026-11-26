@@ -1,6 +1,7 @@
 # app/models/analytics.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.sql import func
+
 from app.core.database import Base
 
 

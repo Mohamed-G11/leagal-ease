@@ -1,18 +1,20 @@
 # app/v1/endpoints/ai.py
 # RAG-powered AI chat with Darija support + conversation history in DB
+import json
+import re
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
 from sqlalchemy.orm import Session
-import json, re, httpx
 
-from app.core.dependencies import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.user import User
+from app.core.dependencies import get_current_user
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
-from app.rag.retriever import retrieve, build_context
+from app.models.user import User
+from app.rag.retriever import RagBackendUnavailable, build_context, retrieve
 
 try:
     from slowapi import Limiter
@@ -111,7 +113,8 @@ FEW_SHOT = {
     "darija": """
 === أمثلة على الدارجة التونسية الصحيحة ===
 مثال 1:
-السياق: "Pour créer une entreprise: 1) Rédiger les statuts. 2) Ouvrir un compte bancaire. 3) S'immatriculer au RNE dans les 60 jours."
+السياق: "Pour créer une entreprise: 1) Rédiger les statuts. 2) Ouvrir un compte bancaire. 3) S'immatriculer au RNE \
+dans les 60 jours."
 السؤال: كيفاش نعمل شركة؟
 الجواب الصحيح بالدارجة: باش تعمل شركة، لازم:
 1) تكتب عقد التأسيس
@@ -203,16 +206,16 @@ class ChatMessageSchema(BaseModel):
 
 class ChatRequest(BaseModel):
     message:         str
-    history:         Optional[List[ChatMessageSchema]] = []
-    lang:            Optional[str] = "auto"
-    conversation_id: Optional[int] = None
+    history:         list[ChatMessageSchema] | None = []
+    lang:            str | None = "auto"
+    conversation_id: int | None = None
 
 class ConversationOut(BaseModel):
     id:         int
-    title:      Optional[str]
-    lang:       Optional[str]
+    title:      str | None
+    lang:       str | None
     created_at: str
-    messages:   List[dict]
+    messages:   list[dict]
 
     class Config:
         from_attributes = True
@@ -222,7 +225,7 @@ class ConversationOut(BaseModel):
 # STREAMING HELPER
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def stream_groq(messages: List[dict], api_key: str):
+async def stream_groq(messages: list[dict], api_key: str):
     async with httpx.AsyncClient(timeout=90.0) as client:
         async with client.stream(
             "POST", GROQ_API_URL,
@@ -239,10 +242,12 @@ async def stream_groq(messages: List[dict], api_key: str):
                 yield f"data: {json.dumps({'error': 'Groq API error'})}\n\n"
                 return
             async for line in resp.aiter_lines():
-                if not line.startswith("data: "): continue
+                if not line.startswith("data: "):
+                    continue
                 raw = line[6:].strip()
                 if raw == "[DONE]":
-                    yield "data: [DONE]\n\n"; return
+                    yield "data: [DONE]\n\n"
+                    return
                 try:
                     delta = json.loads(raw)["choices"][0]["delta"].get("content", "")
                     if delta:
@@ -258,7 +263,7 @@ async def stream_groq(messages: List[dict], api_key: str):
 def get_or_create_conversation(
     db: Session,
     user_id: int,
-    conversation_id: Optional[int],
+    conversation_id: int | None,
     first_message: str,
     lang: str,
 ) -> ChatConversation:
@@ -285,7 +290,7 @@ def save_message(db: Session, conversation_id: int, role: MessageRole, content: 
     return msg
 
 
-def load_history_from_db(db: Session, conversation_id: int, limit: int = 10) -> List[dict]:
+def load_history_from_db(db: Session, conversation_id: int, limit: int = 10) -> list[dict]:
     messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.conversation_id == conversation_id)
@@ -347,6 +352,8 @@ async def chat_stream(
         docs    = retrieve(req.message, lang=lang, top_k=8)
         context = build_context(docs, max_chars=5000)
         print(f"   📊 Docs scores: {[round(d.get('score', 0), 3) for d in docs]}")
+    except RagBackendUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError:
         docs    = []
         context = ""
@@ -361,9 +368,15 @@ async def chat_stream(
     if lang == "darija":
         detail_instr = "[أعطني جواب كامل ومفصل بالدارجة مع كل الخطوات والآجال والوثائق المطلوبة]"
     elif lang == "fr":
-        detail_instr = "[Donne une réponse complète et détaillée avec toutes les étapes, délais officiels, frais et documents requis. Utilise des listes numérotées.]"
+        detail_instr = (
+            "[Donne une réponse complète et détaillée avec toutes les étapes, délais officiels, frais et documents "
+            "requis. Utilise des listes numérotées.]"
+        )
     else:
-        detail_instr = "[Give a complete and detailed answer with all steps, official deadlines, fees and required documents. Use numbered lists.]"
+        detail_instr = (
+            "[Give a complete and detailed answer with all steps, official deadlines, fees and required documents. Use "
+            "numbered lists.]"
+        )
 
     messages.append({
         "role":    "user",

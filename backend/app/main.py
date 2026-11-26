@@ -1,17 +1,25 @@
 # app/main.py  (final — all routers registered)
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.v1.endpoints import auth, procedure, documents, notifications, admin
 from app.core.database import SessionLocal
 from app.crud.notification import check_deadlines
-from app.v1.endpoints import ai
-
-from app.v1.endpoints import analytics, upload, feedback, collaboration
+from app.v1.endpoints import (
+    admin,
+    ai,
+    analytics,
+    auth,
+    collaboration,
+    documents,
+    feedback,
+    notifications,
+    procedure,
+    upload,
+)
 
 
 def run_deadline_check():

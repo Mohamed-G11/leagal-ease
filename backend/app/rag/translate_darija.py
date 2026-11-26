@@ -4,7 +4,9 @@
 import json
 import time
 from pathlib import Path
+
 from groq import Groq
+
 from app.core.config import settings
 
 BASE_DIR    = Path(__file__).parent
@@ -65,14 +67,14 @@ def main():
     client = Groq(api_key=api_key)
 
     print("🔄 Loading dataset...")
-    with open(DATASET_IN, "r", encoding="utf-8") as f:
+    with open(DATASET_IN, encoding="utf-8") as f:
         data = json.load(f)
     print(f"✅ {len(data)} entries loaded")
 
     # Resume support — load already translated entries
     enriched = []
     if DATASET_OUT.exists():
-        with open(DATASET_OUT, "r", encoding="utf-8") as f:
+        with open(DATASET_OUT, encoding="utf-8") as f:
             enriched = json.load(f)
         print(f"📂 Resuming — {len(enriched)} entries already translated")
 
@@ -123,10 +125,10 @@ def main():
 
     print(f"\n✅ Translation complete — {len(enriched)} entries")
     print(f"📁 Saved to: {DATASET_OUT}")
-    print(f"\n▶️  Next steps:")
-    print(f"   copy app\\rag\\datasets\\enriched_dataset.json app\\rag\\datasets\\full_dataset.json")
-    print(f"   python -m app.rag.ingest")
-    print(f"   python -m app.rag.ingest_pdfs")
+    print("\n▶️  Next steps:")
+    print("   copy app\\rag\\datasets\\enriched_dataset.json app\\rag\\datasets\\full_dataset.json")
+    print("   python -m app.rag.ingest")
+    print("   python -m app.rag.ingest_pdfs")
 
 
 if __name__ == "__main__":

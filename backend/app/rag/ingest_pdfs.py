@@ -4,9 +4,10 @@
 
 import re
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
+
 import chromadb
 import fitz  # pymupdf
+from sentence_transformers import SentenceTransformer
 
 BASE_DIR   = Path(__file__).parent
 DOCS_DIR   = BASE_DIR / "datasets" / "docs"

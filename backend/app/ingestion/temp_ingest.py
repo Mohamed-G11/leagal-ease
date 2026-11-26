@@ -129,7 +129,7 @@ def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
                     vector={DENSE: v.tolist(), SPARSE: bm25.encode_document(c.text)},
                     payload=c.model_dump(),
                 )
-                for c, v in zip(part, vectors)
+                for c, v in zip(part, vectors, strict=False)
             ],
         )
     print(f"Indexed {len(all_chunks)} chunks from {len(pdfs)} PDFs into '{cfg.qdrant.collection}'")

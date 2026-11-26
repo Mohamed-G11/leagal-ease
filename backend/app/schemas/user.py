@@ -1,5 +1,5 @@
 # app/schemas/user.py
-from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -16,7 +16,7 @@ class UserResponse(UserBase):
     id:             int
     is_active:      bool
     is_admin:       bool = False
-    preferred_lang: Optional[str] = "fr"
+    preferred_lang: str | None = "fr"
 
     class Config:
         from_attributes = True
@@ -32,9 +32,9 @@ class TokenData(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    email:          Optional[EmailStr] = None
-    username:       Optional[str]      = Field(None, min_length=3, max_length=50)
-    preferred_lang: Optional[str]      = None   # "fr", "en", "darija"
+    email:          EmailStr | None = None
+    username:       str | None      = Field(None, min_length=3, max_length=50)
+    preferred_lang: str | None      = None   # "fr", "en", "darija"
 
 
 class PasswordChange(BaseModel):

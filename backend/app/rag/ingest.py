@@ -2,8 +2,9 @@
 # Run once: python -m app.rag.ingest
 import json
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
+
 import chromadb
+from sentence_transformers import SentenceTransformer
 
 BASE_DIR   = Path(__file__).parent
 DATASET    = BASE_DIR / "datasets" / "full_dataset.json"
@@ -56,8 +57,10 @@ def build_documents(data: list) -> tuple[list, list, list]:
             if isinstance(content, dict):
                 cf = (content.get("fr") or "").strip()
                 ce = (content.get("en") or "").strip()
-                if cf: sections_fr.append(cf)
-                if ce: sections_en.append(ce)
+                if cf:
+                    sections_fr.append(cf)
+                if ce:
+                    sections_en.append(ce)
             elif isinstance(content, str) and content.strip():
                 sections_en.append(content.strip())
 
@@ -111,7 +114,7 @@ def ingest():
     print(f"✅ Model: {EMBED_MODEL}")
 
     print("🔄 Loading dataset...")
-    with open(DATASET, "r", encoding="utf-8") as f:
+    with open(DATASET, encoding="utf-8") as f:
         data = json.load(f)
     print(f"✅ {len(data)} entries loaded")
 
