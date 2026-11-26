@@ -1,0 +1,3 @@
+{"id": "q001", "question": "Dans quel délai une société doit-elle s'inscrire au registre ?", "reference_answer": "Dans un délai de dix jours.", "doc_id": "loi_rne", "pages": [2], "lang": "fr", "category": "factual"}
+{"id": "q002", "question": "Qu'est-ce que le registre national des entreprises ?", "reference_answer": "Un registre public qui centralise les informations sur les entreprises.", "doc_id": "loi_rne", "pages": [1], "lang": "fr", "category": "factual"}
+{"id": "q003", "question": "Quel est le salaire minimum des pilotes de ligne ?", "reference_answer": "", "doc_id": null, "pages": [], "lang": "fr", "category": "unanswerable"}
