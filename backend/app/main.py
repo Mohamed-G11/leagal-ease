@@ -79,16 +79,3 @@ async def log_requests(request, call_next):
     print(f"  {request.method} {request.url.path}")
     response = await call_next(request)
     return response
-
-@app.get("/api/v1/test-email")
-def test_email():
-    from app.services.email import send_deadline_reminder
-    send_deadline_reminder(
-        to_email       = "ghouiliwiem013@gmail.com",  # ← ton email
-        username       = "Test",
-        step_title     = "Inscription RNE",
-        procedure_name = "Création d'entreprise",
-        days_remaining = 3,
-        due_date       = "2026-05-15",
-    )
-    return {"status": "sent"}
