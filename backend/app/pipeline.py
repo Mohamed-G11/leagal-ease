@@ -1,4 +1,6 @@
-"""RAG pipeline (E0 dense / E1 hybrid, chosen by config): retrieve -> generate. This is what Mohamed's /chat calls (W6).
+"""RAG pipeline: retrieve -> generate.
+
+E0 dense / E1 hybrid / E2 advanced retrieval, chosen by config. This is what Mohamed's /chat calls (W6).
 
 Run:
     python -m app.pipeline "Quel est le rôle du RNE ?" \
@@ -21,7 +23,9 @@ class RAGPipeline:
 
     def answer(self, question: str, filters: dict | None = None) -> Answer:
         chunks = self.retriever.retrieve(question, k=self.cfg.retrieval.top_k, filters=filters)
-        return self.generator.generate(question, chunks)
+        # E2: the query transformer detects Darija, which the simple script-based detector cannot
+        lang = getattr(self.retriever, "last_lang", None)
+        return self.generator.generate(question, chunks, lang=lang)
 
 
 if __name__ == "__main__":
