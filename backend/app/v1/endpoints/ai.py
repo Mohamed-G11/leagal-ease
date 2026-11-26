@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.errors import APIError
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.models.user import User
 from app.rag.retriever import RagBackendUnavailable, build_context, retrieve
@@ -33,7 +34,7 @@ GROQ_MODEL   = "llama-3.3-70b-versatile"
 def get_groq_key() -> str:
     key = settings.GROQ_API_KEY
     if not key:
-        raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured.")
+        raise APIError(503, "llm_error", "GROQ_API_KEY not configured.")
     return key
 
 
