@@ -1,4 +1,8 @@
-"""Loads the RAG pipeline once, in the background, and reports its state."""
+"""The served RAG pipeline: loaded in the background at startup, switched by an admin reload.
+
+It comes from the model registry (the champion version) when MLFLOW_TRACKING_URI is set, and from the
+RAG_CONFIG file otherwise, or when the registry cannot provide a usable model.
+"""
 import logging
 import threading
 from contextvars import ContextVar
@@ -6,6 +10,7 @@ from pathlib import Path
 
 from app.core.config import settings  # also loads .env, so QDRANT_URL and GROQ_API_KEY are in the environment
 from app.core.errors import APIError
+from app.services import model_source
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +28,11 @@ class RagService:
         self.state = "loading"  # loading -> ready | failed
         self.cfg = None
         self.pipeline = None
+        self.source = None  # "registry" | "config"
+        self.version = None  # registry version, when the source is the registry
         self._thread = None
         self._probe = None
+        self._loading = threading.Lock()  # one load or reload at a time
 
     def start(self) -> None:
         """Load in a background thread so the server answers while the embedding model loads."""
@@ -33,29 +41,71 @@ class RagService:
             self._thread.start()
 
     def load(self) -> None:
+        """The registry champion, else the config file."""
+        with self._loading:
+            problem = self._load_champion()
+            if problem:
+                logger.info("Serving the config file: %s", problem)
+                self._load_config()
+
+    def reload(self) -> str | None:
+        """Switch to the current champion. Returns why the champion is not served, or None.
+
+        What is being served keeps serving until the new pipeline is ready, and stays if it cannot be built.
+        """
+        if not self._loading.acquire(blocking=False):
+            raise APIError(409, "conflict", "The assistant is already loading a model.")
+        try:
+            problem = self._load_champion()
+            if problem and self.pipeline is None:
+                self._load_config()
+            return problem
+        finally:
+            self._loading.release()
+
+    def _load_champion(self) -> str | None:
+        if not model_source.enabled():
+            return "MLFLOW_TRACKING_URI is not set"
+        try:
+            version = model_source.champion_version()
+            if version is None:
+                return "the registry has no champion"
+            if (self.source, self.version) != ("registry", version):
+                pipeline = model_source.load_version(version)
+                self._serve(pipeline, pipeline.cfg, "registry", version)
+            return None
+        except Exception:
+            logger.warning("Could not load the registry champion", exc_info=True)
+            return "the registry champion could not be loaded (see the server log)"
+
+    def _load_config(self) -> None:
         try:
             from app.core.experiment_config import load_config
             from app.pipeline import RAGPipeline
 
-            self.cfg = load_config(self.config_path)
-            self.pipeline = RAGPipeline(self.cfg)
-            self._observe_retrieval()
-            self.state = "ready"
-            logger.info("RAG pipeline ready (%s)", self.cfg.name)
+            cfg = load_config(self.config_path)
+            self._serve(RAGPipeline(cfg), cfg, "config", None)
         except Exception:
             self.state = "failed"
             logger.exception("RAG pipeline failed to load from %s", self.config_path)
 
-    def _observe_retrieval(self) -> None:
+    def _serve(self, pipeline, cfg, source: str, version: str | None) -> None:
+        self._observe_retrieval(pipeline, cfg)  # before requests can see this pipeline
+        self.cfg, self.pipeline, self._probe = cfg, pipeline, None
+        self.source, self.version, self.state = source, version, "ready"
+        logger.info("RAG pipeline ready (%s from the %s, version %s)", getattr(cfg, "name", "?"), source, version)
+
+    @staticmethod
+    def _observe_retrieval(pipeline, cfg) -> None:
         """Wrap retrieve() to remember the chunk order and, with a reranker, the best score.
 
         The generator numbers its sources in this order, so it gives the [n] of each citation.
         Scores are kept only with a reranker: without one they mean something else.
         """
-        retriever = getattr(self.pipeline, "retriever", None)
+        retriever = getattr(pipeline, "retriever", None)
         if retriever is None:
             return  # citations then have no number
-        has_reranker = getattr(getattr(self.cfg, "reranker", None), "enabled", False)
+        has_reranker = getattr(getattr(cfg, "reranker", None), "enabled", False)
         retrieve = retriever.retrieve
 
         def retrieve_and_record(*args, **kwargs):
@@ -92,6 +142,9 @@ class RagService:
         except Exception:
             logger.warning("Qdrant check failed", exc_info=True)
             return "down"
+
+    def model_info(self) -> dict:
+        return {"source": self.source, "version": self.version, "config": getattr(self.cfg, "name", None)}
 
     def ready_pipeline(self):
         """The pipeline, or a 503 explaining why it cannot answer. Qdrant is checked on every call."""

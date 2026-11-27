@@ -4,6 +4,13 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def no_real_model_registry(monkeypatch):
+    """A developer's .env may point at DagsHub: tests must not reach it."""
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("MLFLOW_REGISTRY_URI", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_real_groq_calls(monkeypatch):
     """Safety net: a test that forgets to mock Groq fails instead of calling the real API."""
     real_sync = httpx.HTTPTransport.handle_request

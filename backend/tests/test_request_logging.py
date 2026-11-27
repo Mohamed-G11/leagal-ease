@@ -219,9 +219,8 @@ def test_reranker_score_is_not_shared_between_concurrent_requests():
         return [scored(query, scores[query])]
 
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=True))
     service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._observe_retrieval()
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
     both_retrieved = threading.Barrier(2, timeout=5)
 
     def request(query):
@@ -237,9 +236,8 @@ def test_reranker_score_is_captured_from_the_retriever():
     chunks = [scored("c1", 0.7), scored("c2", 0.2)]
     retriever = SimpleNamespace(retrieve=lambda query, k=None, filters=None: chunks)
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=True))
     service.pipeline = SimpleNamespace(retriever=retriever)
-    service._observe_retrieval()
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
 
     reranker_score.set(None)
     assert service.pipeline.retriever.retrieve("q", k=2) == chunks
@@ -251,9 +249,8 @@ def test_scores_are_ignored_without_a_reranker():
         return [scored("c1", 0.7)]
 
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=False))
     service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._observe_retrieval()
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=False)))
 
     reranker_score.set(None)
     service.pipeline.retriever.retrieve("q")

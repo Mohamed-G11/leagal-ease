@@ -14,6 +14,9 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.core.database import SessionLocal
+
+# Every model module: User's relationships name classes from the others.
+from app.models import analytics, chat, collaboration, procedure  # noqa: F401
 from app.models.user import User
 
 

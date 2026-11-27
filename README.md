@@ -74,6 +74,26 @@ Swagger UI is at `http://localhost:8000/docs`. Both endpoints need a login token
 Each question is answered on its own: the conversation history is saved but not sent to the model. Until the
 pipeline and the index are ready, both return HTTP 503.
 
+### Which model is served
+
+With `MLFLOW_TRACKING_URI` set, the API serves the version of `legalease-rag` that has the `champion` alias in the
+MLflow Model Registry (see [docs/README_REGISTRY.md](docs/README_REGISTRY.md)). It serves the `RAG_CONFIG` file
+instead when the variable is empty, the registry is unreachable, there is no champion, or the model cannot be loaded.
+`/health` says which: `"model": {"source": "registry", "version": "3", "config": "E1_hybrid_rag"}`.
+
+After moving the alias, switch the running API with an admin account (no restart or redeploy):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/admin/rag/reload -H "Authorization: Bearer <admin token>"
+```
+
+- Create an admin with `python -m scripts.make_admin <username>` (from `backend/`).
+- If the new champion cannot be loaded, the current model keeps serving and `message` says why.
+- A registry model runs the code it contains: give write access to the registry only to people you trust.
+- The API runs its own `app` code, so a new version changes the experiment config, not the code. Code changes
+  still need a deploy.
+- The new version's collection must already be indexed in Qdrant.
+
 ## Run the API in Docker
 
 ```bash
