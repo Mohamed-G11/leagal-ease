@@ -25,7 +25,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env              # then edit the values (SECRET_KEY, GROQ_API_KEY, passwords)
 
 # 4. PostgreSQL and Qdrant
-docker compose up -d
+docker compose up -d postgres qdrant
 
 # 5. Database schema and API
 cd backend
@@ -69,6 +69,22 @@ Swagger UI is at `http://localhost:8000/docs`. Both endpoints need a login token
 
 Each question is answered on its own: the conversation history is saved but not sent to the model. Until the
 pipeline and the index are ready, both return HTTP 503.
+
+## Run the API in Docker
+
+```bash
+cp .env.example .env       # then set SECRET_KEY, GROQ_API_KEY and the PostgreSQL password
+docker compose up -d --build
+```
+
+This starts PostgreSQL, Qdrant and the API on `http://localhost:8000` (the API applies the migrations first).
+
+- Models are not baked into the image. The first start downloads BGE-M3 (about 2.3 GB) into the `hf_cache` volume;
+  until then `/health` reports `"pipeline": "loading"`. Follow it with `docker compose logs -f api`.
+- The API needs an indexed collection. With Qdrant running, ingest once from your machine (see "RAG pipeline").
+- Compose overrides `DATABASE_URL` and `QDRANT_URL` from `.env` with the container addresses. `.env` is read at run
+  time and is not copied into the image.
+- To run the API from source instead, start only the services: `docker compose up -d postgres qdrant`.
 
 ## Checks
 

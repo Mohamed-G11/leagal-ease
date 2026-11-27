@@ -27,6 +27,41 @@ services:
       retries: 5
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: legalease-api:local
+    container_name: legalease-api
+    # Secrets (SECRET_KEY, GROQ_API_KEY, ...) are read at run time and are never part of the image.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # These override .env, which points at localhost. The user and password go through
+      # PGUSER / PGPASSWORD, so special characters need no URL encoding.
+      DATABASE_URL: postgresql+psycopg2://@postgres:5432/${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+      # Plain downloads, and no second copy of the BGE-M3 weights in safetensors format.
+      HF_HUB_DISABLE_XET: "1"
+      DISABLE_SAFETENSORS_CONVERSION: "1"
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
+      - api_uploads:/srv/backend/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   qdrant_data:
   postgres_data:
+  hf_cache:
+  api_uploads:
