@@ -170,6 +170,24 @@ Deleting a conversation erases the question text in its log rows and the questio
 
 Run `alembic upgrade head` after pulling.
 
+## Tracing (Langfuse)
+
+Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL` in `.env` and restart the API. Without
+the keys nothing is sent. A Langfuse failure never fails a chat request.
+
+Each `/chat` and `/chat/stream` request is one trace named `chat`, grouped by conversation (Langfuse "sessions"),
+with these steps and their durations:
+
+- `retrieval` (chunk ids and scores), containing `query_rewrite` and `reranking` when the config uses them
+- `generation` (model and token counts)
+
+The trace carries status, number of citations, message id and the served model. Costs appear when the model has a
+price in your Langfuse project (Settings > Models). `/chat/public` is traced as `chat_public`, with status,
+duration and token counts only.
+
+**Text is not sent by default.** `LANGFUSE_CAPTURE_TEXT=true` adds question, prompt and answer (never for
+`/chat/public`). Deleting a conversation in the app does **not** erase it from Langfuse.
+
 ## Monitoring
 
 Set `GRAFANA_ADMIN_PASSWORD` in `.env`, then `docker compose up -d --build`.

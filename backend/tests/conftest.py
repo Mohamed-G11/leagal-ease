@@ -4,6 +4,13 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def no_real_tracing(monkeypatch):
+    """A developer's .env may hold Langfuse keys: tests must not send anything."""
+    for name in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_CAPTURE_TEXT"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_real_model_registry(monkeypatch):
     """A developer's .env may point at DagsHub: tests must not reach it."""
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)

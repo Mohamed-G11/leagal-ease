@@ -8,6 +8,7 @@ import threading
 from contextvars import ContextVar
 from pathlib import Path
 
+from app import tracing
 from app.core.config import settings  # also loads .env, so QDRANT_URL and GROQ_API_KEY are in the environment
 from app.core.errors import APIError
 from app.services import model_source
@@ -90,7 +91,8 @@ class RagService:
             logger.exception("RAG pipeline failed to load from %s", self.config_path)
 
     def _serve(self, pipeline, cfg, source: str, version: str | None) -> None:
-        self._observe_retrieval(pipeline, cfg)  # before requests can see this pipeline
+        self._observe_retrieval(pipeline, cfg)  # both before requests can see this pipeline
+        tracing.instrument(pipeline)
         self.cfg, self.pipeline, self._probe = cfg, pipeline, None
         self.source, self.version, self.state = source, version, "ready"
         logger.info("RAG pipeline ready (%s from the %s, version %s)", getattr(cfg, "name", "?"), source, version)

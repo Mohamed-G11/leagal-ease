@@ -6,6 +6,7 @@ from groq import GroqError
 from qdrant_client.http.exceptions import ApiException as QdrantApiException
 from sqlalchemy.orm import Session
 
+from app import tracing
 from app.analytics.tracker import log_query
 from app.core.errors import APIError
 from app.core.schemas import Answer
@@ -86,13 +87,21 @@ def numbered_citations(answer: Answer) -> list[dict]:
 def ask(
     db: Session, user_id: int, message: str, conversation_id: int | None, lang: str, endpoint: str = "chat"
 ) -> ChatOut:
-    """Raises APIError when the pipeline cannot answer, after saving that failure.
+    """One traced exchange. Raises APIError when the pipeline cannot answer, after saving that failure.
 
     The error carries the conversation_id, so that a retry can continue the same conversation.
     """
     conv_id = get_or_create_conversation(db, user_id, conversation_id, message, lang).id
     save_message(db, conv_id, MessageRole.user, message)
 
+    with tracing.observe("chat", session_id=str(conv_id), input=tracing.text(message),
+                         metadata={"endpoint": endpoint, "lang": lang, **rag_service.model_info()}) as trace:
+        return _answer(db, trace, user_id, message, conv_id, lang, endpoint)
+
+
+def _answer(
+    db: Session, trace: tracing.Observation, user_id: int, message: str, conv_id: int, lang: str, endpoint: str
+) -> ChatOut:
     reranker_score.set(None)
     retrieved_ids.set(())
     started = time.perf_counter()
@@ -113,6 +122,8 @@ def ask(
             status="error", error_code=error.code, citations_count=0, latency_ms=latency_ms,
             message_id=message_id,
         )
+        trace.update(metadata={"status": "error", "error_code": error.code, "citations_count": 0,
+                               "message_id": message_id})
         details = {"conversation_id": conv_id}
         raise APIError(error.status_code, error.code, error.detail, details) from exc
 
@@ -130,6 +141,9 @@ def ask(
         answered=answer.status == "answered", status=answer.status, citations_count=len(answer.citations),
         latency_ms=latency_ms, reranker_score=reranker_score.get(), message_id=message_id,
     )
+    trace.update(output=tracing.text(answer.answer), metadata={
+        "status": answer.status, "citations_count": len(answer.citations), "message_id": message_id,
+    })
     return ChatOut(
         **answer.model_dump(exclude={"citations"}), citations=citations,
         conversation_id=conv_id, message_id=message_id,

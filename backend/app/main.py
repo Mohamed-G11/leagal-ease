@@ -6,6 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import tracing
 from app.api import health
 from app.core.database import SessionLocal
 from app.core.errors import register_error_handlers
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     rag_service.start()
     yield
     scheduler.shutdown()
+    tracing.shutdown()
 
 
 app = FastAPI(title="LegalEase Tunisia API", lifespan=lifespan)
