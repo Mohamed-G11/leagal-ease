@@ -54,9 +54,18 @@ def format_sources(chunks: list[ScoredChunk]) -> str:
     return "\n\n".join(blocks)
 
 
-def build_messages(question: str, chunks: list[ScoredChunk], lang: str) -> list[dict]:
+HISTORY_NOTE = (
+    "\n\nPrevious messages of the conversation are given for context only (what the user is "
+    "referring to). Facts must still come only from the numbered sources of the last message."
+)
+
+
+def build_messages(question: str, chunks: list[ScoredChunk], lang: str, history=None) -> list[dict]:
+    system = SYSTEM_PROMPT.format(lang_name=LANG_NAMES[lang]) + (HISTORY_NOTE if history else "")
+    past = [{"role": t.role, "content": t.content} for t in (history or [])]
     return [
-        {"role": "system", "content": SYSTEM_PROMPT.format(lang_name=LANG_NAMES[lang])},
+        {"role": "system", "content": system},
+        *past,
         {"role": "user", "content": f"Sources:\n{format_sources(chunks)}\n\nQuestion: {question}"},
     ]
 
@@ -97,13 +106,14 @@ class Generator:
             client = Groq(api_key=get_groq_key())
         self.client = client
 
-    def generate(self, question: str, chunks: list[ScoredChunk], lang: str | None = None) -> Answer:
+    def generate(self, question: str, chunks: list[ScoredChunk], lang: str | None = None,
+                 history=None) -> Answer:
         lang = lang or detect_query_lang(question)
         if not chunks:
             return Answer(answer=ABSTAIN_MSG[lang], status="abstained", lang=lang)
         response = self.client.chat.completions.create(
             model=self.cfg.model,
-            messages=build_messages(question, chunks, lang),
+            messages=build_messages(question, chunks, lang, history=history),
             temperature=self.cfg.temperature,
             max_tokens=self.cfg.max_tokens,
             response_format={"type": "json_object"},
