@@ -294,13 +294,12 @@ const Donut = ({ data }: { data: { label: string; value: number; color: string }
   if (total === 0) return <div className="bi-empty"><p>No data yet</p></div>;
 
   const R = 52; const CX = 60; const CY = 60; const stroke = 18;
-  let cumPct = 0;
 
-  const slices = data.map(d => {
+  const slices = data.map((d, i) => {
     const pct = d.value / total;
-    const startAngle = cumPct * 2 * Math.PI - Math.PI / 2;
-    cumPct += pct;
-    const endAngle = cumPct * 2 * Math.PI - Math.PI / 2;
+    const before = data.slice(0, i).reduce((s, x) => s + x.value / total, 0);
+    const startAngle = before * 2 * Math.PI - Math.PI / 2;
+    const endAngle = (before + pct) * 2 * Math.PI - Math.PI / 2;
     const x1 = CX + R * Math.cos(startAngle);
     const y1 = CY + R * Math.sin(startAngle);
     const x2 = CX + R * Math.cos(endAngle);

@@ -307,8 +307,6 @@ const Timeline = () => {
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState('');
 
-  useEffect(() => { fetchData(); }, []);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -326,6 +324,9 @@ const Timeline = () => {
       setLoading(false);
     }
   };
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; rewriting it would change behaviour
+  useEffect(() => { fetchData(); }, []);
 
   const handleStart = async (typeId: number, title?: string) => {
     try {

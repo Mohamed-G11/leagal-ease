@@ -66,11 +66,33 @@ python -m app.ingestion.temp_ingest --pdf-dir ../data/raw --config ../experiment
 
 Swagger UI is at `http://localhost:8000/docs`. Both endpoints need a login token and use the same pipeline:
 
-- `POST /api/v1/chat` returns the whole answer as JSON, with citations.
-- `POST /api/v1/ai/chat/stream` sends it as server-sent events (used by the chat widget).
+- `POST /api/v1/chat` returns the whole answer as JSON, with citations (used by the chat widget). Each citation
+  has a `number`: the `[n]` that refers to it in the answer text, or `null` when unknown.
+- `POST /api/v1/ai/chat/stream` sends the answer as server-sent events.
+- `POST /api/v1/ai/feedback` rates an answer: send `rating` (`up` or `down`) and the `message_id` of the answer.
 
 Each question is answered on its own: the conversation history is saved but not sent to the model. Until the
 pipeline and the index are ready, both return HTTP 503.
+
+### Which model is served
+
+With `MLFLOW_TRACKING_URI` set, the API serves the version of `legalease-rag` that has the `champion` alias in the
+MLflow Model Registry (see [docs/README_REGISTRY.md](docs/README_REGISTRY.md)). It serves the `RAG_CONFIG` file
+instead when the variable is empty, the registry is unreachable, there is no champion, or the model cannot be loaded.
+`/health` says which: `"model": {"source": "registry", "version": "3", "config": "E1_hybrid_rag"}`.
+
+After moving the alias, switch the running API with an admin account (no restart or redeploy):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/admin/rag/reload -H "Authorization: Bearer <admin token>"
+```
+
+- Create an admin with `python -m scripts.make_admin <username>` (from `backend/`).
+- If the new champion cannot be loaded, the current model keeps serving and `message` says why.
+- A registry model runs the code it contains: give write access to the registry only to people you trust.
+- The API runs its own `app` code, so a new version changes the experiment config, not the code. Code changes
+  still need a deploy.
+- The new version's collection must already be indexed in Qdrant.
 
 ## Run the API in Docker
 
@@ -147,6 +169,24 @@ Deleting a conversation erases the question text in its log rows and the questio
 `ai_feedback` rows. The other fields and the ratings stay; the `message_id` link is removed.
 
 Run `alembic upgrade head` after pulling.
+
+## Tracing (Langfuse)
+
+Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL` in `.env` and restart the API. Without
+the keys nothing is sent. A Langfuse failure never fails a chat request.
+
+Each `/chat` and `/chat/stream` request is one trace named `chat`, grouped by conversation (Langfuse "sessions"),
+with these steps and their durations:
+
+- `retrieval` (chunk ids and scores), containing `query_rewrite` and `reranking` when the config uses them
+- `generation` (model and token counts)
+
+The trace carries status, number of citations, message id and the served model. Costs appear when the model has a
+price in your Langfuse project (Settings > Models). `/chat/public` is traced as `chat_public`, with status,
+duration and token counts only.
+
+**Text is not sent by default.** `LANGFUSE_CAPTURE_TEXT=true` adds question, prompt and answer (never for
+`/chat/public`). Deleting a conversation in the app does **not** erase it from Langfuse.
 
 ## Monitoring
 

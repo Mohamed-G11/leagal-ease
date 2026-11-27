@@ -27,13 +27,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
   const [isLoading, setIsLoading] = useState<boolean>(!!localStorage.getItem('access_token'));
 
-  // On mount: if token exists, fetch current user to rehydrate state
-  useEffect(() => {
-    if (localStorage.getItem('access_token') && !user) {
-      fetchCurrentUser();
-    }
-  }, []);
-
   const fetchCurrentUser = async () => {
     setIsLoading(true);
     try {
@@ -47,6 +40,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     }
   };
+
+  // On mount: if token exists, fetch current user to rehydrate state
+  useEffect(() => {
+    if (localStorage.getItem('access_token') && !user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; rewriting it would change behaviour
+      fetchCurrentUser();
+    }
+  }, []);
 
   const login = async (username: string, password: string): Promise<User> => {
     // Step 1 — get the JWT token
@@ -89,6 +90,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- the hook belongs with its provider
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');

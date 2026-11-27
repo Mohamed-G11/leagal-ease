@@ -1,4 +1,4 @@
-"""GET /health: API, PostgreSQL, Qdrant, pipeline and Groq key. Groq itself is never called."""
+"""GET /health: API, PostgreSQL, Qdrant, pipeline, Groq key and served model. Groq itself is never called."""
 import logging
 import os
 from typing import Literal
@@ -23,9 +23,16 @@ class HealthChecks(BaseModel):
     groq_key: Literal["present", "missing"]
 
 
+class ServedModel(BaseModel):
+    source: Literal["registry", "config"] | None  # null while nothing is loaded
+    version: str | None  # model registry version
+    config: str | None  # experiment config name
+
+
 class Health(BaseModel):
     status: Literal["ok", "degraded", "down"]
     checks: HealthChecks
+    model: ServedModel
 
 
 def postgres_status(db: Session) -> str:
@@ -46,8 +53,9 @@ def health(response: Response, db: Session = Depends(get_db)):
         pipeline=rag_service.state,
         groq_key="present" if os.getenv("GROQ_API_KEY") else "missing",
     )
+    model = ServedModel(**rag_service.model_info())
     if checks.postgres == "down":
         response.status_code = 503
-        return Health(status="down", checks=checks)
+        return Health(status="down", checks=checks, model=model)
     rag_ok = (checks.qdrant, checks.pipeline, checks.groq_key) == ("ok", "ready", "present")
-    return Health(status="ok" if rag_ok else "degraded", checks=checks)
+    return Health(status="ok" if rag_ok else "degraded", checks=checks, model=model)

@@ -431,6 +431,7 @@ export default function HomeAIButton({ variant = 'light' }: HomeAIButtonProps) {
   // Show signup CTA after first assistant answer
   useEffect(() => {
     const hasAnswer = messages.some(m => m.role === 'assistant');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- moving this would change when the CTA appears
     if (hasAnswer) setShowCta(true);
   }, [messages]);
 
@@ -480,16 +481,17 @@ export default function HomeAIButton({ variant = 'light' }: HomeAIButtonProps) {
             const parsed = JSON.parse(raw);
             if (parsed.chunk) {
               answer += parsed.chunk;
+              const content = answer;
               setMessages(prev => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: answer, time: fmtTime() };
+                updated[updated.length - 1] = { role: 'assistant', content, time: fmtTime() };
                 return updated;
               });
             }
           } catch { /* ignore */ }
         }
       }
-    } catch (err: any) {
+    } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: "Sorry, I'm having trouble connecting right now. Please try again in a moment.",
