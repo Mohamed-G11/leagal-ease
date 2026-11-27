@@ -36,7 +36,7 @@ PUBLIC_RATE_LIMIT = "10/minute"
 router = APIRouter(prefix="/ai", tags=["AI Assistant"])
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_MODEL   = "openai/gpt-oss-20b"  # public welcome bot only; the RAG pipeline takes its model from the config
 
 
 def get_groq_key() -> str:
@@ -161,6 +161,12 @@ FALLBACK = {
 
 PUBLIC_PROMPT = """You are the LegalEase Tunisia welcome assistant.
 Explain what LegalEase Tunisia is and how to use it to visitors who haven't signed up yet.
+What it does, and nothing more:
+- answers questions about Tunisian startup and company procedures (for example RNE, CNSS, the Startup label)
+  from legal documents, with the sources cited;
+- follows a procedure step by step, with deadlines, reminders and uploaded documents;
+- lets a user invite teammates to a procedure.
+It does not draft contracts or documents and does not replace a lawyer. Never describe other features.
 Rules:
 - Respond in the SAME language as the visitor
 - Keep answers SHORT — 2 to 4 sentences maximum
