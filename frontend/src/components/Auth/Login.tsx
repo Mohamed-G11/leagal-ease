@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import type { ApiError } from '../../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
@@ -389,8 +390,8 @@ export default function Login() {
     try {
       const u = await login(username, password);
       navigate(u.is_admin ? '/admin' : '/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid username or password. Please try again.');
+    } catch (err) {
+      setError((err as ApiError).response?.data?.detail || 'Invalid username or password. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import type { ApiError } from '../../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
@@ -461,9 +462,9 @@ export default function Signup() {
     try {
       await signup(email, username, password);
       navigate('/login');
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      if (Array.isArray(detail)) setError(detail.map((d: any) => d.msg).join(', '));
+    } catch (err) {
+      const detail = (err as ApiError<string | { msg: string }[]>).response?.data?.detail;
+      if (Array.isArray(detail)) setError(detail.map(d => d.msg).join(', '));
       else setError(detail || 'Registration failed. Please try again.');
     } finally { setLoading(false); }
   };

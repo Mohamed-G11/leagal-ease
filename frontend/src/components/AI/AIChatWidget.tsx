@@ -149,6 +149,7 @@ const fmt  = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', min
 const tok  = () => localStorage.getItem('access_token') || '';
 
 interface Msg  { role: 'user' | 'assistant' | 'error'; content: string; time: string; feedback?: 'up' | 'down'; msgIndex?: number; sources?: { title: string; source: string; category: string; score: number }[]; }
+interface SavedMessage { role: 'user' | 'assistant'; content: string; created_at: string; }
 interface Conv { id: number; title: string; lang: string; message_count: number; }
 
 export default function AIChatWidget() {
@@ -191,7 +192,7 @@ export default function AIChatWidget() {
     if (!r.ok) return;
     const d = await r.json();
     setConvId(id);
-    setMsgs(d.messages.map((m: any) => ({
+    setMsgs(d.messages.map((m: SavedMessage) => ({
       role:    m.role,
       content: m.content,
       time:    m.created_at ? new Date(m.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : fmt(),
@@ -277,8 +278,8 @@ export default function AIChatWidget() {
         }
       }
       if (!open) setUnread(n => n + 1);
-    } catch (err: any) {
-      setMsgs(prev => [...prev, { role: 'error', content: err.message || 'Connection failed.', time: fmt() }]);
+    } catch (err) {
+      setMsgs(prev => [...prev, { role: 'error', content: (err as Error).message || 'Connection failed.', time: fmt() }]);
     } finally { setBusy(false); }
   }, [input, busy, convId, open]);
 
@@ -364,7 +365,7 @@ export default function AIChatWidget() {
                 )}
                 {m.role==='assistant' && m.sources && m.sources.length > 0 && (
                   <div className="aip-sources">
-                    {m.sources.map((s: any, si: number) => (
+                    {m.sources.map((s, si) => (
                       <div key={si} className="aip-src-item">
                         <div className="aip-src-dot"/>
                         📄 {s.title || s.source}

@@ -7,6 +7,7 @@ import type { GlobalStats, AdminUser } from '../services/adminApi';
 import { procedureApi } from '../services/procedureApi';
 import type { ProcedureType } from '../types/procedure';
 import BIAnalytics from '../components/Admin/BIAnalytics';
+import type { ApiError } from '../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -296,18 +297,19 @@ export default function Admin() {
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
 
-  useEffect(() => { if (user && !(user as any).is_admin) navigate('/dashboard'); }, [user]);
+  useEffect(() => { if (user && !user.is_admin) navigate('/dashboard'); }, [user]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true); setError('');
     try {
       const [s, u, p] = await Promise.all([adminApi.getStats(), adminApi.getUsers(), procedureApi.getTypes()]);
       setStats(s); setUsers(u); setProcTypes(p);
-    } catch (e: any) {
-      setError(e.response?.data?.detail || 'Failed to load admin data.');
+    } catch (e) {
+      setError((e as ApiError).response?.data?.detail || 'Failed to load admin data.');
     } finally { setLoading(false); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; rewriting it would change behaviour
   useEffect(() => { fetchAll(); }, []);
 
   const TABS: { key: TabKey; label: string; sub: string }[] = [

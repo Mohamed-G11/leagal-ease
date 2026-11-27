@@ -3,6 +3,7 @@
 // Theme: Navy + Rouge tunisien
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import type { ApiError } from '../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -129,6 +130,7 @@ const ROLE_PERMS = [
 ];
 
 interface Procedure { id: number; title: string; procedure_type: { name: string }; user_id: number; }
+type ProcedureItem = Procedure & { isOwned: boolean; collabRole?: string };
 interface Collab { id: number; user_id: number; username: string; email: string; role: string; role_label: string; procedure_id: number; }
 interface MyCollab { collaboration_id: number; procedure_id: number; procedure_title: string; role: string; role_label: string; owner_username: string; }
 
@@ -156,7 +158,7 @@ export default function Team() {
         const procs   = Array.isArray(procsR.data)   ? procsR.data   : [];
         const collabs = Array.isArray(collabsR.data) ? collabsR.data : [];
         // Inject user_id from current user into each procedure
-        const procsWithUserId = procs.map((p: any) => ({ ...p, user_id: uid }));
+        const procsWithUserId = procs.map((p: Procedure) => ({ ...p, user_id: uid }));
         setMyProcedures(procsWithUserId);
         setMyCollabs(collabs);
       }).catch(console.error)
@@ -187,8 +189,8 @@ export default function Team() {
       setInviteMsg({ text: `@${inviteUsername} added successfully!`, ok: true });
       setInviteUsername('');
       await loadCollaborators(selectedProc);
-    } catch (err: any) {
-      setInviteMsg({ text: err.response?.data?.detail || 'Failed to invite user', ok: false });
+    } catch (err) {
+      setInviteMsg({ text: (err as ApiError).response?.data?.detail || 'Failed to invite user', ok: false });
     } finally { setInviting(false); }
   };
 
@@ -197,8 +199,8 @@ export default function Team() {
     try {
       await api.delete(`/team/${collabId}`);
       setCollaborators(prev => prev.filter(c => c.id !== collabId));
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to remove collaborator');
+    } catch (err) {
+      alert((err as ApiError).response?.data?.detail || 'Failed to remove collaborator');
     }
   };
 
@@ -206,15 +208,15 @@ export default function Team() {
     try {
       await api.patch(`/team/${collabId}/role`, { role });
       setCollaborators(prev => prev.map(c => c.id === collabId ? { ...c, role, role_label: role } : c));
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to update role');
+    } catch (err) {
+      alert((err as ApiError).response?.data?.detail || 'Failed to update role');
     }
   };
 
   const isOwner = selectedProc ? selectedProc.user_id === currentUserId : false;
 
   // All procedures (owned + collaborated)
-  const allProcedures = [
+  const allProcedures: ProcedureItem[] = [
     ...myProcedures.map(p => ({ ...p, isOwned: true })),
     ...myCollabs.map(c => ({
       id:             c.procedure_id,
@@ -266,20 +268,20 @@ export default function Team() {
             ) : (
               allProcedures.map(proc => (
                 <div
-                  key={`${proc.id}-${(proc as any).isOwned}`}
+                  key={`${proc.id}-${proc.isOwned}`}
                   className={`tm-proc-item ${selectedProc?.id === proc.id ? 'active' : ''}`}
-                  onClick={() => loadCollaborators(proc as Procedure)}
+                  onClick={() => loadCollaborators(proc)}
                 >
-                  <div className={`tm-proc-icon ${(proc as any).isOwned ? 'owned' : ''}`}>
-                    {(proc as any).isOwned ? '📋' : '🤝'}
+                  <div className={`tm-proc-icon ${proc.isOwned ? 'owned' : ''}`}>
+                    {proc.isOwned ? '📋' : '🤝'}
                   </div>
                   <div className="tm-proc-info">
                     <div className="tm-proc-name">{proc.title || proc.procedure_type.name}</div>
                     <div className="tm-proc-meta">{proc.procedure_type.name}</div>
                   </div>
-                  {(proc as any).isOwned
+                  {proc.isOwned
                     ? <span className="tm-owner-badge">Owner</span>
-                    : <span className="tm-collab-badge">{(proc as any).collabRole}</span>
+                    : <span className="tm-collab-badge">{proc.collabRole}</span>
                   }
                 </div>
               ))
