@@ -1,5 +1,7 @@
 # LegalEase-RAG
 
+[![CI](https://github.com/Mohamed-G11/leagal-ease/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mohamed-G11/leagal-ease/actions/workflows/ci.yml?query=branch%3Amain)
+
 A RAG assistant for Tunisian legal texts and administrative procedures: FastAPI backend, React/Vite frontend,
 Qdrant for vector search, PostgreSQL for application data, and Llama 3.3 70B on Groq for answers.
 
