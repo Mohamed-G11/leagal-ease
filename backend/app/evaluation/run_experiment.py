@@ -5,8 +5,11 @@
         --dataset ../data/evaluation/seed.jsonl \
         --pdf-dir ../data/raw --reindex --generation
 
-MLflow server: Mohamed's docker-compose (set MLFLOW_TRACKING_URI=http://localhost:5000).
-Without it, runs go to a local SQLite file (view with `mlflow ui --backend-store-uri sqlite:///mlflow.db`).
+Tracking server: DagsHub. Set MLFLOW_TRACKING_URI=https://dagshub.com/Mohamed-G11/leagal-ease.mlflow,
+MLFLOW_TRACKING_USERNAME and MLFLOW_TRACKING_PASSWORD (personal DagsHub token, never committed).
+Without MLFLOW_TRACKING_URI, runs go to a local SQLite file
+(view with `mlflow ui --backend-store-uri sqlite:///mlflow.db`).
+--reindex rebuilds the collection from scratch (recreate=True): an experiment must not mix old chunks.
 """
 import argparse
 import json
@@ -61,7 +64,7 @@ def run(cfg: ExperimentConfig, config_path: Path, dataset_path: Path, pdf_dir: P
 
         if reindex:
             from app.ingestion.temp_ingest import ingest
-            mlflow.log_metric("n_chunks", ingest(pdf_dir, cfg, embedder=embedder))
+            mlflow.log_metric("n_chunks", ingest(pdf_dir, cfg, embedder=embedder, recreate=True))
 
         if retriever is None:
             from app.retrieval.hybrid import get_retriever

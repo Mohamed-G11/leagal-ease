@@ -42,5 +42,7 @@ class LegalEaseRAGModel(mlflow.pyfunc.PythonModel):
         self.pipeline = RAGPipeline(load_config(context.artifacts["config"]))
 
     def predict(self, context, model_input, params=None) -> list[dict]:
-        filters = (params or {}).get("filters")
-        return [self.pipeline.answer(q, filters=filters).model_dump() for q in _to_questions(model_input)]
+        params = params or {}
+        filters, history = params.get("filters"), params.get("history")
+        return [self.pipeline.answer(q, filters=filters, history=history).model_dump()
+                for q in _to_questions(model_input)]

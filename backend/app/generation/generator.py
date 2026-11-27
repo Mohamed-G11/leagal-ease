@@ -54,38 +54,53 @@ def format_sources(chunks: list[ScoredChunk]) -> str:
     return "\n\n".join(blocks)
 
 
-def build_messages(question: str, chunks: list[ScoredChunk], lang: str) -> list[dict]:
+HISTORY_NOTE = (
+    "\n\nPrevious messages of the conversation are given for context only (what the user is "
+    "referring to). Facts must still come only from the numbered sources of the last message."
+)
+
+
+def build_messages(question: str, chunks: list[ScoredChunk], lang: str, history=None) -> list[dict]:
+    system = SYSTEM_PROMPT.format(lang_name=LANG_NAMES[lang]) + (HISTORY_NOTE if history else "")
+    past = [{"role": t.role, "content": t.content} for t in (history or [])]
     return [
-        {"role": "system", "content": SYSTEM_PROMPT.format(lang_name=LANG_NAMES[lang])},
+        {"role": "system", "content": system},
+        *past,
         {"role": "user", "content": f"Sources:\n{format_sources(chunks)}\n\nQuestion: {question}"},
     ]
 
 
-def parse_answer(raw: str, chunks: list[ScoredChunk], lang: str) -> Answer:
-    """Map the LLM JSON to the shared Answer schema; drop citations that point nowhere."""
+def parse_answer(raw, chunks: list[ScoredChunk], lang: str) -> Answer:
+    """Map the LLM JSON to the shared Answer schema. Never raises: any malformed output
+    (not JSON, a list instead of an object, non-string fields...) becomes an abstention."""
+    abstain = Answer(answer=ABSTAIN_MSG[lang], status="abstained", lang=lang)
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return Answer(answer=ABSTAIN_MSG[lang], status="abstained", lang=lang)
+        data = json.loads(raw) if isinstance(raw, str) else None
+    except (json.JSONDecodeError, ValueError):
+        return abstain
+    if not isinstance(data, dict) or data.get("status") == "abstained":
+        return abstain
+    answer = data.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return abstain
 
-    if data.get("status") == "abstained" or not data.get("answer"):
-        return Answer(answer=ABSTAIN_MSG[lang], status="abstained", lang=lang)
-
+    raw_citations = data.get("citations")
     citations, seen = [], set()
-    for item in data.get("citations") or []:
+    for item in raw_citations if isinstance(raw_citations, list) else []:
+        if not isinstance(item, dict):
+            continue
         try:
             n = int(item.get("source"))
-        except (TypeError, ValueError, AttributeError):
+        except (TypeError, ValueError):
             continue
         if not 1 <= n <= len(chunks) or n in seen:
             continue
         seen.add(n)
         c = chunks[n - 1].chunk
-        citations.append(
-            Citation(chunk_id=c.chunk_id, doc_title=c.doc_title, page=c.page,
-                     quote=(item.get("quote") or c.text[:200]).strip())
-        )
-    return Answer(answer=data["answer"].strip(), citations=citations, status="answered", lang=lang)
+        quote = item.get("quote")
+        quote = quote.strip() if isinstance(quote, str) and quote.strip() else c.text[:200].strip()
+        citations.append(Citation(chunk_id=c.chunk_id, doc_title=c.doc_title, page=c.page, quote=quote))
+    return Answer(answer=answer.strip(), citations=citations, status="answered", lang=lang)
 
 
 class Generator:
@@ -97,13 +112,14 @@ class Generator:
             client = Groq(api_key=get_groq_key())
         self.client = client
 
-    def generate(self, question: str, chunks: list[ScoredChunk], lang: str | None = None) -> Answer:
+    def generate(self, question: str, chunks: list[ScoredChunk], lang: str | None = None,
+                 history=None) -> Answer:
         lang = lang or detect_query_lang(question)
         if not chunks:
             return Answer(answer=ABSTAIN_MSG[lang], status="abstained", lang=lang)
         response = self.client.chat.completions.create(
             model=self.cfg.model,
-            messages=build_messages(question, chunks, lang),
+            messages=build_messages(question, chunks, lang, history=history),
             temperature=self.cfg.temperature,
             max_tokens=self.cfg.max_tokens,
             response_format={"type": "json_object"},

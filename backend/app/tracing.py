@@ -123,6 +123,7 @@ def instrument(pipeline) -> None:
     """Trace retrieval, query rewriting, reranking and generation of a RAGPipeline."""
     retriever = getattr(pipeline, "retriever", None)
     _trace_chunks(retriever, "retrieve", "retrieval", "retriever")
+    _trace_chunks(retriever, "retrieve_with_meta", "retrieval", "retriever")  # E2+: the pipeline calls this one
     _trace_chunks(getattr(retriever, "reranker", None), "rerank", "reranking", "span")
     _trace_llm(getattr(retriever, "transformer", None), "query_rewrite")
     _trace_llm(getattr(pipeline, "generator", None), "generation")
@@ -136,14 +137,15 @@ def _trace_chunks(owner, method: str, name: str, as_type: str) -> None:
 
     def traced(*args, **kwargs):
         with observe(name, as_type) as observation:
-            chunks = original(*args, **kwargs)
+            result = original(*args, **kwargs)
+            chunks = getattr(result, "chunks", result)  # retrieve_with_meta returns a RetrievalResult
             if observation.span is not None:
                 try:
                     found = [{"chunk_id": c.chunk.chunk_id, "score": round(float(c.score), 4)} for c in chunks]
                     observation.update(output=found, metadata={"chunks": len(found)})
                 except Exception:
                     _warn()
-            return chunks
+            return result
 
     setattr(owner, method, traced)
 

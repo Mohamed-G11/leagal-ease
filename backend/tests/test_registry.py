@@ -30,7 +30,7 @@ def test_to_questions_accepts_common_inputs():
 
 
 class FakePipeline:
-    def answer(self, question, filters=None):
+    def answer(self, question, filters=None, history=None):
         return Answer(answer=f"echo: {question}", status="answered", lang="fr")
 
 
