@@ -68,6 +68,17 @@ def test_rate_limit_per_ip(env):
     assert other.post(URL, json={"message": "hi"}).status_code == 200
 
 
+def test_rate_limit_response_on_the_real_app(env):
+    """The app as deployed must answer with our error shape, not slowapi's {"error": "Rate limit exceeded: ..."}."""
+    from app.main import app
+
+    client = TestClient(app)  # no `with`: the lifespan (scheduler, model loading) does not run
+    responses = [client.post(URL, json={"message": "hi"}) for _ in range(11)]
+    assert responses[-1].status_code == 429
+    message = "Too many requests. Please wait a minute and try again."
+    assert responses[-1].json() == {"error": {"code": "rate_limited", "message": message}, "detail": message}
+
+
 def unreachable():
     raise httpx.ConnectError("secret")
 
