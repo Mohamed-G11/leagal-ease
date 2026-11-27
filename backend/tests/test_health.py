@@ -29,7 +29,8 @@ def make_service(state="ready", qdrant=None):
     service = RagService("unused.yaml")
     service.state = state
     if state == "ready":
-        service.cfg = SimpleNamespace(qdrant=SimpleNamespace(url=None, collection="test"))
+        service.cfg = SimpleNamespace(name="E_test", qdrant=SimpleNamespace(url=None, collection="test"))
+        service.source = "config"
         service.pipeline = SimpleNamespace(retriever=SimpleNamespace(client=qdrant or FakeQdrant()))
     return service
 
@@ -51,7 +52,8 @@ def test_all_ok(monkeypatch):
     resp = get_health(monkeypatch, make_service())
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok", "checks": {
-        "api": "ok", "postgres": "ok", "qdrant": "ok", "pipeline": "ready", "groq_key": "present"}}
+        "api": "ok", "postgres": "ok", "qdrant": "ok", "pipeline": "ready", "groq_key": "present"},
+        "model": {"source": "config", "version": None, "config": "E_test"}}
 
 
 @pytest.mark.parametrize("service,qdrant,pipeline", [

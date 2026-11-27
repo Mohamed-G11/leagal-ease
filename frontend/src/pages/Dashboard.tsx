@@ -252,7 +252,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [query,  setQuery]  = useState('');
   const [imgIdx, setImgIdx] = useState(0);
-  const isAdmin  = (user as any)?.is_admin === true;
+  const isAdmin  = user?.is_admin === true;
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',

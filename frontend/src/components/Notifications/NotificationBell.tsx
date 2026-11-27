@@ -68,8 +68,19 @@ const NotificationBell = () => {
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  const fetchSummary = async () => {
+    try {
+      const data = await notificationApi.getAll();
+      setUnread(data.unread);
+      setNotifications(data.items);
+    } catch {
+      // Silently fail (user may not be logged in yet)
+    }
+  };
+
   // Fetch unread count every 60 s
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load on mount; rewriting it would change behaviour
     fetchSummary();
     const interval = setInterval(fetchSummary, 60_000);
     return () => clearInterval(interval);
@@ -85,16 +96,6 @@ const NotificationBell = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  const fetchSummary = async () => {
-    try {
-      const data = await notificationApi.getAll();
-      setUnread(data.unread);
-      setNotifications(data.items);
-    } catch {
-      // Silently fail (user may not be logged in yet)
-    }
-  };
 
   const handleOpen = () => {
     setOpen((v) => !v);

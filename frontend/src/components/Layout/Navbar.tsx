@@ -118,7 +118,7 @@ const STYLE = `
 export default function Navbar() {
   const { token, user, logout } = useAuth();
   const location = useLocation();
-  const isAdmin  = (user as any)?.is_admin === true;
+  const isAdmin  = user?.is_admin === true;
   const initials = user?.username?.slice(0, 2).toUpperCase() || 'U';
 
   // Pages with their own full-page layout — no global navbar

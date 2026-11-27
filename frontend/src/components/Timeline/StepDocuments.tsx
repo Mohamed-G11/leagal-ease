@@ -4,6 +4,7 @@ import React from 'react';
 import { useRef, useState } from 'react';
 import type { StepDocument } from '../../types/procedure';
 import { documentApi } from '../../services/documentApi';
+import type { ApiError } from '../../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -294,8 +295,8 @@ const StepDocuments = ({ progressId, initialDocuments, disabled = false }: StepD
         Array.from(files).map(f => documentApi.upload(progressId, f))
       );
       setDocs(prev => [...prev, ...uploads]);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Upload failed. Check file type and size (max 10 MB).');
+    } catch (err) {
+      setError((err as ApiError).response?.data?.detail || 'Upload failed. Check file type and size (max 10 MB).');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';

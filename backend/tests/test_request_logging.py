@@ -19,7 +19,7 @@ from app.core.schemas import Answer, Citation
 # Import every model module so that relationships resolve.
 from app.models import analytics, chat, collaboration, procedure, user  # noqa: F401
 from app.services import chat as chat_service
-from app.services.rag import RagService, rag_service, reranker_score
+from app.services.rag import RagService, rag_service, reranker_score, retrieved_ids
 from app.v1.endpoints import ai, feedback
 from app.v1.endpoints import chat as chat_endpoint
 
@@ -114,11 +114,25 @@ def rate(env, **body):
 def test_feedback_is_linked_to_the_rated_answer(env):
     first = env.client.post("/api/v1/chat", json=QUESTION).json()
     conv = first["conversation_id"]
-    # what the chat widget sends today: no message_id
+    # an older client: no message_id
     assert rate(env, conversation_id=conv, answer=ANSWERED.answer, message_index=1) == first["message_id"]
     assert rate(env, message_id=first["message_id"]) == first["message_id"]
     assert rate(env, conversation_id=conv, answer="something else") is None
     assert rate(env) is None
+
+
+def test_message_id_wins_over_what_the_client_says(env):
+    first = env.client.post("/api/v1/chat", json=QUESTION).json()
+    second = env.client.post("/api/v1/chat", json=QUESTION).json()  # same answer text, other conversation
+    body = {"message_id": first["message_id"], "conversation_id": second["conversation_id"], "answer": "edited"}
+    assert rate(env, **body) == first["message_id"]
+    assert env.rows(analytics.AIFeedback)[-1].conversation_id == first["conversation_id"]
+
+
+def test_unknown_message_id_is_not_replaced_by_a_text_match(env):
+    first = env.client.post("/api/v1/chat", json=QUESTION).json()
+    body = {"message_id": 9999, "conversation_id": first["conversation_id"], "answer": ANSWERED.answer}
+    assert rate(env, **body) is None
 
 
 def test_feedback_cannot_point_at_another_users_message(env):
@@ -194,46 +208,79 @@ def test_database_errors_hide_query_parameters():
     assert engine.hide_parameters
 
 
+def scored(chunk_id, score):
+    return SimpleNamespace(score=score, chunk=SimpleNamespace(chunk_id=chunk_id))
+
+
 def test_reranker_score_is_not_shared_between_concurrent_requests():
     scores = {"a": 0.9, "b": 0.1}
 
     def retrieve(query, k=None, filters=None):
-        return [SimpleNamespace(score=scores[query])]
+        return [scored(query, scores[query])]
 
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=True))
     service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._capture_reranker_score()
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
     both_retrieved = threading.Barrier(2, timeout=5)
 
     def request(query):
         service.pipeline.retriever.retrieve(query)
         both_retrieved.wait()  # read only after both requests have written
-        return reranker_score.get()
+        return reranker_score.get(), retrieved_ids.get()
 
     with ThreadPoolExecutor(2) as pool:
-        assert list(pool.map(request, "ab")) == [0.9, 0.1]
+        assert list(pool.map(request, "ab")) == [(0.9, ("a",)), (0.1, ("b",))]
 
 
 def test_reranker_score_is_captured_from_the_retriever():
-    chunks = [SimpleNamespace(score=0.7), SimpleNamespace(score=0.2)]
+    chunks = [scored("c1", 0.7), scored("c2", 0.2)]
     retriever = SimpleNamespace(retrieve=lambda query, k=None, filters=None: chunks)
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=True))
     service.pipeline = SimpleNamespace(retriever=retriever)
-    service._capture_reranker_score()
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
 
     reranker_score.set(None)
     assert service.pipeline.retriever.retrieve("q", k=2) == chunks
-    assert reranker_score.get() == 0.7
+    assert reranker_score.get() == 0.7 and retrieved_ids.get() == ("c1", "c2")
 
 
 def test_scores_are_ignored_without_a_reranker():
     def retrieve(query, k=None, filters=None):
-        return []
+        return [scored("c1", 0.7)]
 
     service = RagService("unused.yaml")
-    service.cfg = SimpleNamespace(reranker=SimpleNamespace(enabled=False))
     service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._capture_reranker_score()
-    assert service.pipeline.retriever.retrieve is retrieve  # RRF or cosine scores are not reranker scores
+    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=False)))
+
+    reranker_score.set(None)
+    service.pipeline.retriever.retrieve("q")
+    assert reranker_score.get() is None  # RRF or cosine scores are not reranker scores
+    assert retrieved_ids.get() == ("c1",)
+
+
+def test_citations_are_numbered_like_the_answer_markers_and_kept_in_history(env, monkeypatch):
+    def citation(chunk_id):
+        return Citation(chunk_id=chunk_id, doc_title="Loi", page=1, quote="q")
+
+    answer = Answer(
+        answer="A [3]. B [1].", citations=[citation("c3"), citation("c1"), citation("unseen")],
+        status="answered", lang="fr", confidence=0.8,
+    )
+
+    def run(question, filters=None):
+        retrieved_ids.set(("c1", "c2", "c3"))  # what the wrapped retriever records
+        return answer
+
+    monkeypatch.setattr(rag_service, "ready_pipeline", lambda: SimpleNamespace(answer=run))
+    body = env.client.post("/api/v1/chat", json=QUESTION).json()
+    assert [(c["chunk_id"], c["number"]) for c in body["citations"]] == [("c3", 3), ("c1", 1), ("unseen", None)]
+    assert body["confidence"] == 0.8
+
+    saved = env.client.get(f"/api/v1/ai/conversations/{body['conversation_id']}").json()["messages"][1]
+    assert (saved["id"], saved["status"], saved["confidence"]) == (body["message_id"], "ok", 0.8)
+    assert saved["citations"] == body["citations"]
+
+
+def test_numbers_of_a_previous_request_are_not_reused(env):
+    retrieved_ids.set(("c1",))
+    assert env.client.post("/api/v1/chat", json=QUESTION).json()["citations"][0]["number"] is None

@@ -16,6 +16,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
+from app import tracing
 from app.analytics.tracker import erase_conversation_text
 from app.core.config import settings
 from app.core.database import get_db
@@ -35,7 +36,7 @@ PUBLIC_RATE_LIMIT = "10/minute"
 router = APIRouter(prefix="/ai", tags=["AI Assistant"])
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_MODEL   = "openai/gpt-oss-20b"  # public welcome bot only; the RAG pipeline takes its model from the config
 
 
 def get_groq_key() -> str:
@@ -160,6 +161,12 @@ FALLBACK = {
 
 PUBLIC_PROMPT = """You are the LegalEase Tunisia welcome assistant.
 Explain what LegalEase Tunisia is and how to use it to visitors who haven't signed up yet.
+What it does, and nothing more:
+- answers questions about Tunisian startup and company procedures (for example RNE, CNSS, the Startup label)
+  from legal documents, with the sources cited;
+- follows a procedure step by step, with deadlines, reminders and uploaded documents;
+- lets a user invite teammates to a procedure.
+It does not draft contracts or documents and does not replace a lawyer. Never describe other features.
 Rules:
 - Respond in the SAME language as the visitor
 - Keep answers SHORT — 2 to 4 sentences maximum
@@ -243,8 +250,11 @@ def groq_error() -> APIError:
     return APIError(502, "llm_error", "The language model could not answer. Try again.")
 
 
-async def open_groq_stream(messages: list[dict], api_key: str):
-    """Send the request and check Groq's status before our response starts, so failures get a real HTTP error."""
+async def open_groq_stream(messages: list[dict], api_key: str, usage: dict):
+    """Send the request and check Groq's status before our response starts, so failures get a real HTTP error.
+
+    `usage` receives the token counts Groq sends with its last event.
+    """
     client = httpx.AsyncClient(timeout=90.0)
     request = client.build_request(
         "POST", GROQ_API_URL,
@@ -268,10 +278,10 @@ async def open_groq_stream(messages: list[dict], api_key: str):
         await resp.aclose()
         await client.aclose()
         raise groq_error()
-    return stream_groq(client, resp)
+    return stream_groq(client, resp, usage)
 
 
-async def stream_groq(client: httpx.AsyncClient, resp: httpx.Response):
+async def stream_groq(client: httpx.AsyncClient, resp: httpx.Response, usage: dict):
     try:
         async for line in resp.aiter_lines():
             if not line.startswith("data: "):
@@ -281,7 +291,9 @@ async def stream_groq(client: httpx.AsyncClient, resp: httpx.Response):
                 yield "data: [DONE]\n\n"
                 return
             try:
-                delta = json.loads(raw)["choices"][0]["delta"].get("content", "")
+                event = json.loads(raw)
+                usage.update((event.get("x_groq") or {}).get("usage") or {})
+                delta = event["choices"][0]["delta"].get("content", "")
                 if delta:
                     yield sse({"chunk": delta})
             except (json.JSONDecodeError, KeyError, IndexError):
@@ -329,14 +341,21 @@ async def chat_public(request: Request, req: PublicChatRequest, db: Session = De
     messages.append({"role": "user", "content": req.message})
 
     started = time.perf_counter()
+    usage: dict = {}
+    # No text at all: neither the visitor's question nor the reply
+    trace = tracing.start("chat_public", "generation", model=GROQ_MODEL, metadata={"endpoint": "public"})
 
     async def log(status: str) -> None:
+        tokens = {"input": usage.get("prompt_tokens"), "output": usage.get("completion_tokens")}
+        trace.update(metadata={"status": status}, level="ERROR" if status == "error" else "DEFAULT",
+                     usage_details={k: v for k, v in tokens.items() if isinstance(v, int)} or None)
+        trace.end()
         latency_ms = round((time.perf_counter() - started) * 1000)
         lang = detect_language(req.message)
         await run_in_threadpool(record_public_request, db, req.message, lang, status, latency_ms)
 
     try:
-        stream = await open_groq_stream(messages, get_groq_key())
+        stream = await open_groq_stream(messages, get_groq_key(), usage)
     except Exception:
         await log("error")
         raise
@@ -437,11 +456,13 @@ async def get_conversation(
         "created_at": conv.created_at.isoformat() if conv.created_at else "",
         "messages": [
             {
+                "id":         m.id,
                 "role":       m.role.value,
                 "content":    m.content,
                 "status":     m.status,
                 "error_code": m.error_code,
                 "citations":  m.citations or [],
+                "confidence": m.confidence,
                 "created_at": m.created_at.isoformat() if m.created_at else "",
             }
             for m in conv.messages

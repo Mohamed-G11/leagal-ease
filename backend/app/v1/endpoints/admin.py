@@ -1,10 +1,12 @@
 # app/v1/endpoints/admin.py
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_admin
+from app.core.errors import ERROR_RESPONSES
 from app.crud import admin as crud_admin
 from app.schemas.admin import (
     AdminProcedureTypeCreate,
@@ -16,8 +18,30 @@ from app.schemas.admin import (
     GlobalStats,
 )
 from app.schemas.procedure import ProcedureStepResponse, ProcedureTypeResponse
+from app.services.rag import rag_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+# ── Served model ──────────────────────────────────────────────────────────────
+
+class ReloadResult(BaseModel):
+    changed: bool
+    source: str | None
+    version: str | None
+    config: str | None
+    message: str | None  # why the registry champion is not the one being served
+
+
+# A plain `def`: loading a pipeline blocks, so FastAPI must run this in its thread pool.
+@router.post("/rag/reload", response_model=ReloadResult, responses=ERROR_RESPONSES,
+             summary="Serve the current champion")
+def reload_model(_: object = Depends(get_current_admin)):
+    """Call after moving the champion alias in the model registry. No restart or redeploy is needed."""
+    before = rag_service.model_info()
+    message = rag_service.reload()
+    after = rag_service.model_info()
+    return ReloadResult(changed=after != before, message=message, **after)
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────

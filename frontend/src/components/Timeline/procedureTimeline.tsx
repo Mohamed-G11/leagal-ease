@@ -193,13 +193,12 @@ const AIContextPopup = ({ step, status, onSelect, onClose }: AICtxProps) => (
 interface StepCardProps {
   progress: UserStepProgress;
   isLast: boolean;
-  procedureId: number;
   onUpdate: (stepId: number, status: StepStatus, notes?: string) => Promise<void>;
   onDueDateChange: (progressId: number, stepId: number, dueDate: string | null) => Promise<void>;
   onAskAI: (message: string) => void;
 }
 
-const StepCard = ({ progress, isLast, procedureId, onUpdate, onDueDateChange, onAskAI }: StepCardProps) => {
+const StepCard = ({ progress, isLast, onUpdate, onDueDateChange, onAskAI }: StepCardProps) => {
   const [expanded,    setExpanded]    = useState(progress.status === 'in_progress');
   const [notes,       setNotes]       = useState(progress.notes || '');
   const [loading,     setLoading]     = useState(false);
@@ -383,7 +382,7 @@ const ProcedureTimeline = ({ procedure, onUpdate, onAskAI }: ProcedureTimelinePr
     setLocal(updated); onUpdate?.(updated);
   };
 
-  const handleDueDateChange = async (progressId: number, stepId: number, dueDate: string | null) => {
+  const handleDueDateChange = async (_progressId: number, stepId: number, dueDate: string | null) => {
     await notificationApi.setDueDate(local.id, stepId, dueDate);
     const updated = await procedureApi.getMyProcedure(local.id);
     setLocal(updated); onUpdate?.(updated);
@@ -433,7 +432,6 @@ const ProcedureTimeline = ({ procedure, onUpdate, onAskAI }: ProcedureTimelinePr
               key={progress.id}
               progress={progress}
               isLast={i === sorted.length - 1}
-              procedureId={local.id}
               onUpdate={handleStepUpdate}
               onDueDateChange={handleDueDateChange}
               onAskAI={handleAskAI}

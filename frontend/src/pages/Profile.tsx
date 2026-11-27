@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import type { ApiError } from '../types/errors';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -482,8 +483,8 @@ export default function Profile() {
       // Save preferred lang to localStorage for chatbot to use immediately
       localStorage.setItem('preferred_lang', lang);
       showToast('Profile updated successfully');
-    } catch (err: any) {
-      showToast(err.response?.data?.detail || 'Update failed', 'error');
+    } catch (err) {
+      showToast((err as ApiError).response?.data?.detail || 'Update failed', 'error');
     } finally {
       setSavingInfo(false);
     }
@@ -498,8 +499,8 @@ export default function Profile() {
       await api.post('/auth/change-password', { old_password: oldPwd, new_password: newPwd });
       setOldPwd(''); setNewPwd('');
       showToast('Password changed successfully');
-    } catch (err: any) {
-      showToast(err.response?.data?.detail || 'Password change failed', 'error');
+    } catch (err) {
+      showToast((err as ApiError).response?.data?.detail || 'Password change failed', 'error');
     } finally {
       setSavingPwd(false); }
   };
@@ -524,8 +525,8 @@ export default function Profile() {
       if (res.data.avatar_url) setAvatarPrev(`${res.data.avatar_url}?t=${Date.now()}`);
       setAvatarFile(null);
       showToast('Avatar updated successfully');
-    } catch (err: any) {
-      showToast(err.response?.data?.detail || 'Avatar upload failed', 'error');
+    } catch (err) {
+      showToast((err as ApiError).response?.data?.detail || 'Avatar upload failed', 'error');
     } finally { setUploading(false); }
   };
 
