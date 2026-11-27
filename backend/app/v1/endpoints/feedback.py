@@ -20,16 +20,16 @@ class FeedbackRequest(BaseModel):
     answer:          str | None  = None
     conversation_id: int | None  = None
     message_index:   int | None  = None
-    message_id:      int | None  = None
+    message_id:      int | None  = None  # the rated assistant message (ChatOut.message_id)
 
 
-def rated_message_id(db: Session, user_id: int, req: FeedbackRequest) -> int | None:
-    """The assistant message being rated, only if it belongs to this user.
+def rated_message(db: Session, user_id: int, req: FeedbackRequest):
+    """(id, conversation_id) of the assistant message being rated, only if it belongs to this user.
 
-    The chat widget sends no message_id yet, so the answer is also looked up by its text in the conversation.
+    Clients that send no message_id (older versions) are matched on the answer text in their conversation.
     """
     query = (
-        db.query(ChatMessage.id)
+        db.query(ChatMessage.id, ChatMessage.conversation_id)
         .join(ChatConversation)
         .filter(ChatConversation.user_id == user_id, ChatMessage.role == MessageRole.assistant)
     )
@@ -39,8 +39,7 @@ def rated_message_id(db: Session, user_id: int, req: FeedbackRequest) -> int | N
         query = query.filter(ChatConversation.id == req.conversation_id, ChatMessage.content == req.answer)
     else:
         return None
-    row = query.order_by(ChatMessage.id.desc()).first()
-    return row.id if row else None
+    return query.order_by(ChatMessage.id.desc()).first()
 
 
 @router.post("")
@@ -54,14 +53,16 @@ async def submit_feedback(
         from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="rating must be 'up' or 'down'")
 
+    message = rated_message(db, current_user.id, req)
     feedback = AIFeedback(
         user_id         = current_user.id,
-        conversation_id = req.conversation_id,
+        # The message knows its conversation: more reliable than what the client says.
+        conversation_id = message.conversation_id if message else req.conversation_id,
         message_index   = req.message_index,
         question        = req.question[:500] if req.question else None,
         answer          = req.answer[:1000]  if req.answer  else None,
         rating          = req.rating,
-        message_id      = rated_message_id(db, current_user.id, req),
+        message_id      = message.id if message else None,
     )
     db.add(feedback)
     db.commit()

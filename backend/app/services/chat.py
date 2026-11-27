@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.analytics.tracker import log_query
 from app.core.errors import APIError
+from app.core.schemas import Answer
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.monitoring import chat_duration, chat_requests
 from app.schemas.chat import ChatOut
-from app.services.rag import rag_service, reranker_score
+from app.services.rag import rag_service, reranker_score, retrieved_ids
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,14 @@ def record_public_request(db: Session, question: str, lang: str, status: str, la
     )
 
 
+def numbered_citations(answer: Answer) -> list[dict]:
+    """Each citation with the [n] the answer text uses for it: its position among the retrieved chunks."""
+    numbers = {}
+    for number, chunk_id in enumerate(retrieved_ids.get(), 1):
+        numbers.setdefault(chunk_id, number)
+    return [{**c.model_dump(), "number": numbers.get(c.chunk_id)} for c in answer.citations]
+
+
 def ask(
     db: Session, user_id: int, message: str, conversation_id: int | None, lang: str, endpoint: str = "chat"
 ) -> ChatOut:
@@ -85,6 +94,7 @@ def ask(
     save_message(db, conv_id, MessageRole.user, message)
 
     reranker_score.set(None)
+    retrieved_ids.set(())
     started = time.perf_counter()
     try:
         with chat_duration.time():
@@ -108,14 +118,19 @@ def ask(
 
     latency_ms = round((time.perf_counter() - started) * 1000)
     chat_requests.labels(outcome=answer.status).inc()
+    citations = numbered_citations(answer)
     message_id = save_message(
         db, conv_id, MessageRole.assistant, answer.answer,
         status="abstained" if answer.status == "abstained" else "ok",
-        citations=[c.model_dump() for c in answer.citations] or None,
+        citations=citations or None,
+        confidence=answer.confidence,
     )
     record_request(
         db, question=message, lang=answer.lang, user_id=user_id, endpoint=endpoint,
         answered=answer.status == "answered", status=answer.status, citations_count=len(answer.citations),
         latency_ms=latency_ms, reranker_score=reranker_score.get(), message_id=message_id,
     )
-    return ChatOut(**answer.model_dump(), conversation_id=conv_id, message_id=message_id)
+    return ChatOut(
+        **answer.model_dump(exclude={"citations"}), citations=citations,
+        conversation_id=conv_id, message_id=message_id,
+    )

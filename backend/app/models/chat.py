@@ -1,7 +1,7 @@
 # app/models/chat.py
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -39,7 +39,8 @@ class ChatMessage(Base):
     content         = Column(Text, nullable=False)
     status          = Column(String(16), nullable=False, default="ok", server_default="ok")  # ok | abstained | error
     error_code      = Column(String(32), nullable=True)
-    citations       = Column(JSON(none_as_null=True), nullable=True)  # list of Citation dicts
+    citations       = Column(JSON(none_as_null=True), nullable=True)  # list of Citation dicts, plus "number"
+    confidence      = Column(Float, nullable=True)                    # Answer.confidence
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationship

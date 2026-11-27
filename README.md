@@ -66,8 +66,10 @@ python -m app.ingestion.temp_ingest --pdf-dir ../data/raw --config ../experiment
 
 Swagger UI is at `http://localhost:8000/docs`. Both endpoints need a login token and use the same pipeline:
 
-- `POST /api/v1/chat` returns the whole answer as JSON, with citations.
-- `POST /api/v1/ai/chat/stream` sends it as server-sent events (used by the chat widget).
+- `POST /api/v1/chat` returns the whole answer as JSON, with citations (used by the chat widget). Each citation
+  has a `number`: the `[n]` that refers to it in the answer text, or `null` when unknown.
+- `POST /api/v1/ai/chat/stream` sends the answer as server-sent events.
+- `POST /api/v1/ai/feedback` rates an answer: send `rating` (`up` or `down`) and the `message_id` of the answer.
 
 Each question is answered on its own: the conversation history is saved but not sent to the model. Until the
 pipeline and the index are ready, both return HTTP 503.

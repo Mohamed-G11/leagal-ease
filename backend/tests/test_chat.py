@@ -24,6 +24,7 @@ from app.v1.endpoints import ai
 from app.v1.endpoints import chat as chat_endpoint
 
 CITATION = Citation(chunk_id="rne_p2_0", doc_title="Loi RNE", page=2, quote="dans un delai de dix jours")
+SAVED_CITATION = {**CITATION.model_dump(), "number": None}  # no retriever here
 ANSWERED = Answer(answer="Dix jours [1]. " * 40, citations=[CITATION], status="answered", lang="fr")
 QUESTION = {"message": "Quel est le delai ?"}
 
@@ -67,13 +68,13 @@ def test_chat_returns_the_answer_and_saves_both_messages(env):
     assert resp.status_code == 200
     body = resp.json()
     assert body["answer"] == ANSWERED.answer and body["status"] == "answered"
-    assert body["citations"] == [CITATION.model_dump()]
+    assert body["citations"] == [SAVED_CITATION]
 
     question, answer = env.rows()
     assert (question.role.value, question.content, question.status) == ("user", QUESTION["message"], "ok")
     assert (answer.role.value, answer.status, answer.error_code) == ("assistant", "ok", None)
     assert answer.id == body["message_id"] and answer.conversation_id == body["conversation_id"]
-    assert answer.citations == [CITATION.model_dump()]
+    assert answer.citations == [SAVED_CITATION]
 
 
 def test_abstention_is_saved_as_such(env):
@@ -181,7 +182,7 @@ def test_history_returns_status_and_citations(env):
     conv_id = env.client.post("/api/v1/chat", json=QUESTION).json()["conversation_id"]
     messages = env.client.get(f"/api/v1/ai/conversations/{conv_id}").json()["messages"]
     assert [m["status"] for m in messages] == ["ok", "ok"]
-    assert messages[1]["citations"] == [CITATION.model_dump()] and messages[0]["citations"] == []
+    assert messages[1]["citations"] == [SAVED_CITATION] and messages[0]["citations"] == []
 
 
 def test_swagger_documents_chat():

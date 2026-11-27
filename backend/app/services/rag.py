@@ -11,8 +11,10 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# Best reranker score of the current request. Answer does not carry scores, so it is read from the retriever.
+# What the retriever returned for the current request. Answer carries neither scores nor source numbers,
+# so both are read here. Context variables: concurrent requests do not see each other's values.
 reranker_score: ContextVar[float | None] = ContextVar("reranker_score", default=None)
+retrieved_ids: ContextVar[tuple[str, ...]] = ContextVar("retrieved_ids", default=())
 
 
 class RagService:
@@ -37,25 +39,33 @@ class RagService:
 
             self.cfg = load_config(self.config_path)
             self.pipeline = RAGPipeline(self.cfg)
-            self._capture_reranker_score()
+            self._observe_retrieval()
             self.state = "ready"
             logger.info("RAG pipeline ready (%s)", self.cfg.name)
         except Exception:
             self.state = "failed"
             logger.exception("RAG pipeline failed to load from %s", self.config_path)
 
-    def _capture_reranker_score(self) -> None:
-        """Wrap retrieve() to remember the best score. Only with a reranker: other scores mean something else."""
-        if not getattr(getattr(self.cfg, "reranker", None), "enabled", False):
-            return
-        retrieve = self.pipeline.retriever.retrieve
+    def _observe_retrieval(self) -> None:
+        """Wrap retrieve() to remember the chunk order and, with a reranker, the best score.
+
+        The generator numbers its sources in this order, so it gives the [n] of each citation.
+        Scores are kept only with a reranker: without one they mean something else.
+        """
+        retriever = getattr(self.pipeline, "retriever", None)
+        if retriever is None:
+            return  # citations then have no number
+        has_reranker = getattr(getattr(self.cfg, "reranker", None), "enabled", False)
+        retrieve = retriever.retrieve
 
         def retrieve_and_record(*args, **kwargs):
             chunks = retrieve(*args, **kwargs)
-            reranker_score.set(max((c.score for c in chunks), default=None))
+            retrieved_ids.set(tuple(sc.chunk.chunk_id for sc in chunks))
+            if has_reranker:
+                reranker_score.set(max((sc.score for sc in chunks), default=None))
             return chunks
 
-        self.pipeline.retriever.retrieve = retrieve_and_record
+        retriever.retrieve = retrieve_and_record
 
     def _qdrant_client(self):
         if self.cfg is None:

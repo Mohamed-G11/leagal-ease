@@ -1,6 +1,8 @@
 // src/components/AI/AIChatWidget.tsx
 // Floating chatbot for logged-in users — with conversation history
 import { useState, useRef, useEffect, useCallback } from 'react';
+import AnswerDetails from './AnswerDetails';
+import { cleanMarkers, type Citation } from './citations';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap');
@@ -123,12 +125,28 @@ const STYLE = `
   /* ── Sources ── */
   .aip-sources { display:flex; flex-direction:column; gap:3px; margin-top:5px; }
   .aip-src-item {
-    display:flex; align-items:center; gap:5px; padding:4px 8px;
     background:#F5F4F1; border-radius:6px; border:1px solid #E8E5DF;
-    font-family:'DM Mono',monospace; font-size:9px; color:#6A6865;
-    letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    font-family:'DM Mono',monospace; font-size:9px; color:#6A6865; letter-spacing:0.03em;
+  }
+  .aip-src-item summary { display:flex; align-items:center; gap:5px; padding:4px 8px; cursor:pointer; list-style:none; }
+  .aip-src-item summary::-webkit-details-marker { display:none; }
+  .aip-src-item summary b { color:#1C2B4A; font-weight:700; flex-shrink:0; }
+  .aip-src-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+  .aip-src-page { flex-shrink:0; }
+  .aip-src-item blockquote {
+    margin:0 8px 6px; padding:2px 0 2px 8px; border-left:2px solid #C8102E; white-space:pre-wrap;
+    font-family:'Inter',sans-serif; font-size:11.5px; line-height:1.55; letter-spacing:0; color:#1A1916;
   }
   .aip-src-dot { width:5px; height:5px; border-radius:50%; background:#1C2B4A; opacity:0.4; flex-shrink:0; }
+  /* ── Confidence ── */
+  .aip-conf { display:flex; align-items:center; gap:6px; margin-top:3px; font-family:'DM Mono',monospace; font-size:9px; color:#6A6865; }
+  .aip-conf-bar { width:46px; height:5px; border-radius:3px; background:#E8E5DF; overflow:hidden; }
+  .aip-conf-bar span { display:block; height:100%; background:currentColor; }
+  .aip-conf.high { color:#15803D; } .aip-conf.medium { color:#B45309; } .aip-conf.low { color:#B91C1C; }
+  .aip-conf.unknown { color:#9C9A96; }
+  .aip-conf.abstained { align-self:flex-start; padding:3px 8px; border-radius:6px; background:#FFFBEB; border:1px solid #FDE68A; color:#92400E; }
+  .aip-msg.assistant .aip-bbl.abstained { background:#FFFBEB; border:1px dashed #FCD34D; }
+  .aip-err-title { font-weight:600; margin-bottom:2px; }
   /* ── Feedback buttons ── */
   .aip-feedback { display:flex; align-items:center; gap:4px; margin-top:4px; }
   .aip-fb-btn {
@@ -148,8 +166,30 @@ const API  = 'http://127.0.0.1:8000/api/v1';
 const fmt  = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 const tok  = () => localStorage.getItem('access_token') || '';
 
-interface Msg  { role: 'user' | 'assistant' | 'error'; content: string; time: string; feedback?: 'up' | 'down'; msgIndex?: number; sources?: { title: string; source: string; category: string; score: number }[]; }
-interface SavedMessage { role: 'user' | 'assistant'; content: string; created_at: string; }
+function fromHistory(m: SavedMessage): Msg {
+  const time = m.created_at ? new Date(m.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : fmt();
+  if (m.role === 'user') return { role: 'user', content: m.content, time };
+  if (m.status === 'error') return { role: 'error', content: m.content, time, saved: true };
+  return {
+    role: 'assistant', content: m.content, time, messageId: m.id,
+    status: m.status === 'abstained' ? 'abstained' : 'answered',
+    confidence: m.confidence, citations: m.citations,
+  };
+}
+
+interface Msg {
+  role: 'user' | 'assistant' | 'error'; content: string; time: string; feedback?: 'up' | 'down';
+  messageId?: number; status?: 'answered' | 'abstained'; confidence?: number | null; citations?: Citation[];
+  saved?: boolean; // an error read back from the history
+}
+interface SavedMessage {
+  id: number; role: 'user' | 'assistant'; content: string; created_at: string;
+  status: 'ok' | 'abstained' | 'error'; confidence: number | null; citations: Citation[];
+}
+interface ChatReply {
+  answer: string; citations: Citation[]; status: 'answered' | 'abstained'; confidence: number | null;
+  conversation_id: number; message_id: number;
+}
 interface Conv { id: number; title: string; lang: string; message_count: number; }
 
 export default function AIChatWidget() {
@@ -192,11 +232,7 @@ export default function AIChatWidget() {
     if (!r.ok) return;
     const d = await r.json();
     setConvId(id);
-    setMsgs(d.messages.map((m: SavedMessage) => ({
-      role:    m.role,
-      content: m.content,
-      time:    m.created_at ? new Date(m.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : fmt(),
-    })));
+    setMsgs(d.messages.map(fromHistory));
   };
 
   const newConv = () => { setConvId(null); setMsgs([]); };
@@ -211,19 +247,23 @@ export default function AIChatWidget() {
     setMsgs(prev => prev.map((m, i) => i === idx ? { ...m, feedback: rating } : m));
     // Find the previous user message as question
     const userMsg = msgs.slice(0, idx).reverse().find(m => m.role === 'user');
+    // Nothing was saved: give the buttons back so the user can try again
+    const undo = () => setMsgs(prev => prev.map(m => m.messageId === msg.messageId ? { ...m, feedback: undefined } : m));
     try {
-      await fetch('http://127.0.0.1:8000/api/v1/ai/feedback', {
+      const resp = await fetch(`${API}/ai/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok()}` },
         body: JSON.stringify({
           rating,
+          message_id:  msg.messageId,
           question:    userMsg?.content || '',
           answer:      msg.content,
           message_index: idx,
           conversation_id: convId,
         }),
       });
-    } catch { /* ignore feedback errors silently */ }
+      if (!resp.ok) undo();
+    } catch { undo(); }
   };
 
   const send = useCallback(async (text: string = input) => {
@@ -235,7 +275,7 @@ export default function AIChatWidget() {
     setBusy(true);
 
     try {
-      const resp = await fetch(`${API}/ai/chat/stream`, {
+      const resp = await fetch(`${API}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok()}` },
         body: JSON.stringify({ message: q, conversation_id: convId }),
@@ -248,35 +288,13 @@ export default function AIChatWidget() {
         throw new Error(body.error?.message || body.detail || `Error ${resp.status}`);
       }
 
-      const reader = resp.body!.getReader();
-      const dec    = new TextDecoder();
-      let   ans    = '';
-      setMsgs(prev => [...prev, { role: 'assistant', content: '', time: fmt() }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of dec.decode(value).split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]') break;
-          try {
-            const p = JSON.parse(raw);
-            if (p.chunk) {
-              ans += p.chunk;
-              setMsgs(prev => { const u=[...prev]; u[u.length-1]={role:'assistant',content:ans,time:fmt()}; return u; });
-            }
-            if (p.conversation_id) { setConvId(p.conversation_id); refreshConvs(); }
-            if (p.sources) {
-              setMsgs(prev => {
-                const u = [...prev];
-                u[u.length - 1] = { ...u[u.length - 1], sources: p.sources };
-                return u;
-              });
-            }
-          } catch { /* ignore */ }
-        }
-      }
+      const reply: ChatReply = await resp.json();
+      setConvId(reply.conversation_id);
+      refreshConvs();
+      setMsgs(prev => [...prev, {
+        role: 'assistant', content: reply.answer, time: fmt(), messageId: reply.message_id,
+        status: reply.status, confidence: reply.confidence, citations: reply.citations,
+      }]);
       if (!open) setUnread(n => n + 1);
     } catch (err) {
       setMsgs(prev => [...prev, { role: 'error', content: (err as Error).message || 'Connection failed.', time: fmt() }]);
@@ -305,7 +323,7 @@ export default function AIChatWidget() {
             <div className="aip-av">⚖️</div>
             <div>
               <div className="aip-name">LegalEase AI</div>
-              <div className="aip-st"><div className="aip-std"/>RAG · Groq · llama-3.3-70b</div>
+              <div className="aip-st"><div className="aip-std"/>Answers from legal documents, with sources</div>
             </div>
           </div>
           <div className="aip-hr">
@@ -346,31 +364,35 @@ export default function AIChatWidget() {
             <div key={i} className={`aip-msg ${m.role==='error'?'assistant':m.role}`}>
               <div className="aip-mav">{m.role==='user'?'U':'⚖️'}</div>
               <div className="aip-mb">
-                {m.role==='error' ? <div className="aip-err">⚠️ {m.content}</div> : <div className="aip-bbl">{m.content}</div>}
-                {m.role==='assistant' && m.content && (
+                {m.role==='error' ? (
+                  <div className="aip-err">
+                    {m.saved && <div className="aip-err-title">This question was not answered</div>}
+                    ⚠️ {m.content}
+                  </div>
+                ) : (
+                  <div className={`aip-bbl ${m.status === 'abstained' ? 'abstained' : ''}`}>
+                    {m.role === 'assistant' ? cleanMarkers(m.content, m.citations ?? []) : m.content}
+                  </div>
+                )}
+                {m.role==='assistant' && (
+                  <AnswerDetails status={m.status} confidence={m.confidence} citations={m.citations} />
+                )}
+                {m.role==='assistant' && m.messageId !== undefined && (
                   <div className="aip-feedback">
                     <button
                       className={`aip-fb-btn up ${m.feedback==='up'?'selected':''}`}
                       onClick={() => sendFeedback(m, 'up', i)}
                       disabled={!!m.feedback}
                       title="Helpful"
+                      aria-label="Helpful"
                     >👍</button>
                     <button
                       className={`aip-fb-btn down ${m.feedback==='down'?'selected':''}`}
                       onClick={() => sendFeedback(m, 'down', i)}
                       disabled={!!m.feedback}
                       title="Not helpful"
+                      aria-label="Not helpful"
                     >👎</button>
-                  </div>
-                )}
-                {m.role==='assistant' && m.sources && m.sources.length > 0 && (
-                  <div className="aip-sources">
-                    {m.sources.map((s, si) => (
-                      <div key={si} className="aip-src-item">
-                        <div className="aip-src-dot"/>
-                        📄 {s.title || s.source}
-                      </div>
-                    ))}
                   </div>
                 )}
                 <div className="aip-t">{m.time}</div>

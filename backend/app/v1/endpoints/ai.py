@@ -437,11 +437,13 @@ async def get_conversation(
         "created_at": conv.created_at.isoformat() if conv.created_at else "",
         "messages": [
             {
+                "id":         m.id,
                 "role":       m.role.value,
                 "content":    m.content,
                 "status":     m.status,
                 "error_code": m.error_code,
                 "citations":  m.citations or [],
+                "confidence": m.confidence,
                 "created_at": m.created_at.isoformat() if m.created_at else "",
             }
             for m in conv.messages
