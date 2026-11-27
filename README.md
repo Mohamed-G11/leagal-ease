@@ -115,3 +115,20 @@ python -c "import torch; print(torch.cuda.is_available())"
 ```
 
 Do not commit this change to `requirements.txt`.
+
+## Monitoring
+
+Set `GRAFANA_ADMIN_PASSWORD` in `.env`, then `docker compose up -d --build`.
+
+| Service | Address | Notes |
+|---|---|---|
+| Metrics | `http://localhost:8000/metrics` | Served by the API |
+| Prometheus | `http://localhost:9090` | Scrapes the API every 15 s |
+| Grafana | `http://localhost:3000` | User `admin`. Dashboard "LegalEase API" in the LegalEase folder |
+
+- The datasource and dashboard are provisioned from `monitoring/`. Edit the files, not the Grafana UI.
+- Grafana stores the password at its first start. Changing `.env` later does not change it.
+- Chat metrics: `legalease_chat_requests_total{outcome="answered|abstained|error"}` and
+  `legalease_chat_duration_seconds`. `/chat/public` is not counted.
+- CPU and memory are those of the API process only, not of the whole machine or the other containers.
+- `/metrics` has **no authentication**. Do not expose port 8000 to the internet without blocking that path.

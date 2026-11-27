@@ -10,6 +10,7 @@ from app.api import health
 from app.core.database import SessionLocal
 from app.core.errors import register_error_handlers
 from app.crud.notification import check_deadlines
+from app.monitoring import setup_metrics
 from app.services.rag import rag_service
 from app.v1.endpoints import (
     admin,
@@ -75,6 +76,9 @@ app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(collaboration.router, prefix="/api/v1")
 
 
+
+
+setup_metrics(app)
 
 
 @app.get("/")

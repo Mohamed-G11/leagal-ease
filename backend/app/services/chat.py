@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import APIError
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
+from app.monitoring import chat_duration, chat_requests
 from app.schemas.chat import ChatOut
 from app.services.rag import rag_service
 
@@ -63,8 +64,10 @@ def ask(db: Session, user_id: int, message: str, conversation_id: int | None, la
     save_message(db, conv_id, MessageRole.user, message)
 
     try:
-        answer = rag_service.ready_pipeline().answer(message)
+        with chat_duration.time():
+            answer = rag_service.ready_pipeline().answer(message)
     except Exception as exc:
+        chat_requests.labels(outcome="error").inc()
         error = _to_api_error(exc)
         if error is not exc:
             logger.exception("RAG pipeline failed in conversation %s", conv_id)
@@ -72,6 +75,7 @@ def ask(db: Session, user_id: int, message: str, conversation_id: int | None, la
         details = {"conversation_id": conv_id}
         raise APIError(error.status_code, error.code, error.detail, details) from exc
 
+    chat_requests.labels(outcome=answer.status).inc()
     message_id = save_message(
         db, conv_id, MessageRole.assistant, answer.answer,
         status="abstained" if answer.status == "abstained" else "ok",
