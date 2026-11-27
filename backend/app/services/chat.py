@@ -66,6 +66,14 @@ def record_request(db: Session, **fields) -> None:
         logger.warning("Could not log the chat request", exc_info=True)
 
 
+def record_public_request(db: Session, question: str, lang: str, status: str, latency_ms: int) -> None:
+    """Anonymous visitors: no user id, IP address or anything else about who asked."""
+    record_request(
+        db, question=question, lang=lang, endpoint="public", status=status, answered=status == "answered",
+        latency_ms=latency_ms,
+    )
+
+
 def ask(
     db: Session, user_id: int, message: str, conversation_id: int | None, lang: str, endpoint: str = "chat"
 ) -> ChatOut:

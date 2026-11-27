@@ -2,10 +2,11 @@
 # Adapted from colleague's analytics/tracker.py — persisted to PostgreSQL
 from collections import defaultdict
 
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.analytics import AIQueryLog
+from app.models.analytics import AIFeedback, AIQueryLog
+from app.models.chat import ChatMessage
 
 
 def log_query(
@@ -34,16 +35,42 @@ def log_query(
     db.commit()
 
 
+# /chat/public rows: "answered" only means Groq replied, not that the documents held an answer.
+NOT_PUBLIC = AIQueryLog.endpoint.is_distinct_from("public")
+
+
+def erase_conversation_text(db: Session, conversation_id: int, user_id: int) -> None:
+    """Erase the question and answer text kept outside the conversation. The caller commits.
+
+    Log rows keep their other fields, feedback rows keep the rating.
+    """
+    messages = select(ChatMessage.id).where(ChatMessage.conversation_id == conversation_id)
+    db.query(AIQueryLog).filter(AIQueryLog.message_id.in_(messages)).update(
+        {AIQueryLog.question: ""}, synchronize_session=False
+    )
+    # conversation_id comes from the client, so only the owner's ratings are matched.
+    db.query(AIFeedback).filter(
+        AIFeedback.user_id == user_id,
+        or_(AIFeedback.conversation_id == conversation_id, AIFeedback.message_id.in_(messages)),
+    ).update({AIFeedback.question: None, AIFeedback.answer: None}, synchronize_session=False)
+
+
 def get_overview(db: Session) -> dict:
-    """General stats — adapted from colleague's get_overview()."""
+    """General stats — adapted from colleague's get_overview().
+
+    total_queries counts every row; the answered figures and the rate leave out /chat/public.
+    """
     total    = db.query(func.count(AIQueryLog.id)).scalar() or 0
-    answered = db.query(func.count(AIQueryLog.id)).filter(AIQueryLog.answered.is_(True)).scalar() or 0
+    rated    = db.query(func.count(AIQueryLog.id)).filter(NOT_PUBLIC).scalar() or 0
+    answered = (
+        db.query(func.count(AIQueryLog.id)).filter(NOT_PUBLIC, AIQueryLog.answered.is_(True)).scalar() or 0
+    )
 
     return {
         "total_queries":      total,
         "answered_queries":   answered,
-        "unanswered_queries": total - answered,
-        "answer_rate":        round(answered / total * 100, 1) if total else 0,
+        "unanswered_queries": rated - answered,
+        "answer_rate":        round(answered / rated * 100, 1) if rated else 0,
     }
 
 
@@ -119,7 +146,7 @@ def get_unanswered_queries(db: Session, limit: int = 20) -> list:
     """Queries the RAG couldn't answer — useful to detect dataset gaps."""
     rows = (
         db.query(AIQueryLog)
-        .filter(AIQueryLog.answered.is_(False))
+        .filter(NOT_PUBLIC, AIQueryLog.answered.is_(False), AIQueryLog.question != "")  # "" = erased by the user
         .order_by(desc(AIQueryLog.created_at))
         .limit(limit)
         .all()

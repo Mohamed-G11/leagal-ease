@@ -5,8 +5,15 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from app.core.database import Base, get_db
 from app.core.errors import register_error_handlers
+
+# Import every model module so that relationships resolve.
+from app.models import analytics, chat, collaboration, procedure, user  # noqa: F401
 from app.v1.endpoints import ai
 
 URL = "/api/v1/ai/chat/public"
@@ -14,7 +21,25 @@ OK_BODY = "\n\n".join(['data: {"choices": [{"delta": {"content": "Bonjour"}}]}',
 
 
 @pytest.fixture
-def env(monkeypatch):
+def database():
+    """In-memory request log, so that no test writes to a real database."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+
+    def override_db():
+        with sessions() as db:
+            yield db
+
+    def rows():
+        with sessions() as db:
+            return db.query(analytics.AIQueryLog).order_by(analytics.AIQueryLog.id).all()
+
+    return override_db, rows
+
+
+@pytest.fixture
+def env(monkeypatch, database):
     sent = []  # the JSON bodies sent to Groq
     behaviour = {"response": lambda: httpx.Response(200, text=OK_BODY)}
 
@@ -31,6 +56,7 @@ def env(monkeypatch):
     app = FastAPI()
     register_error_handlers(app)
     app.include_router(ai.router, prefix="/api/v1")
+    app.dependency_overrides[get_db] = database[0]
     yield TestClient(app), sent, behaviour
     ai.limiter.reset()
 
@@ -68,10 +94,11 @@ def test_rate_limit_per_ip(env):
     assert other.post(URL, json={"message": "hi"}).status_code == 200
 
 
-def test_rate_limit_response_on_the_real_app(env):
+def test_rate_limit_response_on_the_real_app(env, database, monkeypatch):
     """The app as deployed must answer with our error shape, not slowapi's {"error": "Rate limit exceeded: ..."}."""
     from app.main import app
 
+    monkeypatch.setitem(app.dependency_overrides, get_db, database[0])
     client = TestClient(app)  # no `with`: the lifespan (scheduler, model loading) does not run
     responses = [client.post(URL, json={"message": "hi"}) for _ in range(11)]
     assert responses[-1].status_code == 429
@@ -115,3 +142,35 @@ def test_missing_key(env, monkeypatch):
     monkeypatch.setattr(ai.settings, "GROQ_API_KEY", "")
     resp = client.post(URL, json={"message": "hi"})
     assert resp.status_code == 503 and resp.json()["error"]["code"] == "llm_error" and sent == []
+
+
+def test_exchange_is_logged_without_anything_about_the_visitor(env, database):
+    client, _, _ = env
+    client.post(URL, json={"message": "Comment créer une startup ?", "history": []})
+    [log] = database[1]()
+    assert (log.question, log.lang, log.endpoint) == ("Comment créer une startup ?", "fr", "public")
+    assert (log.status, log.answered) == ("answered", True) and log.latency_ms >= 0
+    assert (log.user_id, log.message_id, log.citations_count, log.reranker_score, log.error_code) == (None,) * 5
+
+
+@pytest.mark.parametrize("response", [
+    lambda: httpx.Response(500),
+    unreachable,
+    lambda: httpx.Response(200, text=OK_BODY.split("data: [DONE]")[0]),  # ends before [DONE]
+])
+def test_failed_exchanges_are_logged(env, database, response):
+    client, _, behaviour = env
+    behaviour["response"] = response
+    client.post(URL, json={"message": "hi"})
+    assert [(log.status, log.answered) for log in database[1]()] == [("error", False)]
+
+
+def test_a_logging_failure_does_not_break_the_public_chat(env, monkeypatch):
+    from app.services import chat as chat_service
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("log table is gone")
+
+    monkeypatch.setattr(chat_service, "log_query", broken)
+    client, _, _ = env
+    assert client.post(URL, json={"message": "hi"}).text.endswith("data: [DONE]\n\n")

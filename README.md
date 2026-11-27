@@ -127,8 +127,15 @@ SELECT l.question, l.status, l.latency_ms, f.rating
 FROM ai_query_logs l LEFT JOIN ai_feedback f ON f.message_id = l.message_id;
 ```
 
-`/chat/public` is not logged. Deleting a conversation keeps its log rows (including the question text) and
-removes the `message_id` link. Run `alembic upgrade head` after pulling.
+`/api/v1/ai/chat/public` (anonymous visitors) logs only the question, language, `status` (`answered` or `error`)
+and latency, with `endpoint = 'public'`: no IP address or visitor identifier.
+
+The admin answer rate and unanswered-questions list leave out these public rows.
+
+Deleting a conversation erases the question text in its log rows and the question and answer text in its
+`ai_feedback` rows. The other fields and the ratings stay; the `message_id` link is removed.
+
+Run `alembic upgrade head` after pulling.
 
 ## Monitoring
 
