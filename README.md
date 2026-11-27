@@ -78,6 +78,8 @@ docker compose up -d --build
 ```
 
 This starts PostgreSQL, Qdrant and the API on `http://localhost:8000` (the API applies the migrations first).
+The API, PostgreSQL (5433) and Qdrant (6333, 6334) ports are bound to `127.0.0.1`, so other machines on the
+network cannot reach them.
 
 - Models are not baked into the image. The first start downloads BGE-M3 (about 2.3 GB) into the `hf_cache` volume;
   until then `/health` reports `"pipeline": "loading"`. Follow it with `docker compose logs -f api`.
