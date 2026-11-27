@@ -348,7 +348,7 @@ def chat_stream(
     """
     lang = req.lang if req.lang and req.lang != "auto" else detect_language(req.message)
     # Runs before the response starts, so failures are ordinary JSON errors.
-    result = ask(db, current_user.id, req.message, req.conversation_id, lang)
+    result = ask(db, current_user.id, req.message, req.conversation_id, lang, endpoint="stream")
 
     return StreamingResponse(
         answer_events(result),

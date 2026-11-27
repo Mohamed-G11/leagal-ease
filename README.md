@@ -116,6 +116,20 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 Do not commit this change to `requirements.txt`.
 
+## Request log
+
+Every call to `/api/v1/chat` and `/api/v1/ai/chat/stream` writes one row in `ai_query_logs`: question (first 500
+characters), language, `status`, number of citations, latency, reranker score (only with a config that enables a
+reranker) and `message_id`. Feedback rows in `ai_feedback` carry the same `message_id`, so they can be joined:
+
+```sql
+SELECT l.question, l.status, l.latency_ms, f.rating
+FROM ai_query_logs l LEFT JOIN ai_feedback f ON f.message_id = l.message_id;
+```
+
+`/chat/public` is not logged. Deleting a conversation keeps its log rows (including the question text) and
+removes the `message_id` link. Run `alembic upgrade head` after pulling.
+
 ## Monitoring
 
 Set `GRAFANA_ADMIN_PASSWORD` in `.env`, then `docker compose up -d --build`.

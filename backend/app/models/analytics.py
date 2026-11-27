@@ -1,5 +1,5 @@
 # app/models/analytics.py
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -16,6 +16,15 @@ class AIQueryLog(Base):
     docs_found  = Column(Integer, default=0)
     answered    = Column(Boolean, default=True)
     endpoint    = Column(String(20), default="stream")
+    status          = Column(String(16), nullable=True)   # answered | abstained | error
+    error_code      = Column(String(32), nullable=True)
+    citations_count = Column(Integer, nullable=True)
+    latency_ms      = Column(Integer, nullable=True)      # time spent in the RAG pipeline
+    reranker_score  = Column(Float, nullable=True)        # best chunk, only when a reranker is configured
+    message_id      = Column(Integer,                     # the saved assistant message
+                             ForeignKey("chat_messages.id", ondelete="SET NULL",
+                                        name="fk_ai_query_logs_message_id"),
+                             nullable=True, index=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
@@ -29,4 +38,8 @@ class AIFeedback(Base):
     question        = Column(Text, nullable=True)       # the user question
     answer          = Column(Text, nullable=True)       # the AI answer
     rating          = Column(String(10), nullable=False) # "up" or "down"
+    message_id      = Column(Integer,                     # the rated assistant message
+                             ForeignKey("chat_messages.id", ondelete="SET NULL",
+                                        name="fk_ai_feedback_message_id"),
+                             nullable=True, index=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now(), index=True)
