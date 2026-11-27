@@ -81,6 +81,7 @@ pytest                # tests (run from the repo root)
 
 - `requirements.txt`: pinned direct runtime dependencies.
 - `requirements-dev.txt`: adds pytest, httpx and ruff.
+- `requirements-mlops.txt`: adds Prefect, RAGAS and Evidently (offline tools). CI and the API image skip it.
 - `requirements.lock`: full `pip freeze` of the dev environment, for reference.
 
 PyTorch installs as the CPU build by default, so CI never downloads the multi-GB CUDA wheels.
