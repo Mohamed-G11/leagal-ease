@@ -1,0 +1,18 @@
+# Allow-list: only what backend/Dockerfile copies is sent to Docker, so .env and local data never are.
+*
+
+!requirements.txt
+!requirements.lock
+!backend/alembic.ini
+!backend/alembic/**
+!backend/app/**
+!backend/scripts/**
+!experiments/**
+
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+**/*.db
+# Legacy PDFs and datasets of the old Chroma pipeline: not used by the API.
+backend/app/rag/datasets

@@ -1,6 +1,7 @@
 """Loads the RAG pipeline once, in the background, and reports its state."""
 import logging
 import threading
+from contextvars import ContextVar
 from pathlib import Path
 
 from app.core.config import settings  # also loads .env, so QDRANT_URL and GROQ_API_KEY are in the environment
@@ -9,6 +10,9 @@ from app.core.errors import APIError
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Best reranker score of the current request. Answer does not carry scores, so it is read from the retriever.
+reranker_score: ContextVar[float | None] = ContextVar("reranker_score", default=None)
 
 
 class RagService:
@@ -33,11 +37,25 @@ class RagService:
 
             self.cfg = load_config(self.config_path)
             self.pipeline = RAGPipeline(self.cfg)
+            self._capture_reranker_score()
             self.state = "ready"
             logger.info("RAG pipeline ready (%s)", self.cfg.name)
         except Exception:
             self.state = "failed"
             logger.exception("RAG pipeline failed to load from %s", self.config_path)
+
+    def _capture_reranker_score(self) -> None:
+        """Wrap retrieve() to remember the best score. Only with a reranker: other scores mean something else."""
+        if not getattr(getattr(self.cfg, "reranker", None), "enabled", False):
+            return
+        retrieve = self.pipeline.retriever.retrieve
+
+        def retrieve_and_record(*args, **kwargs):
+            chunks = retrieve(*args, **kwargs)
+            reranker_score.set(max((c.score for c in chunks), default=None))
+            return chunks
+
+        self.pipeline.retriever.retrieve = retrieve_and_record
 
     def _qdrant_client(self):
         if self.cfg is None:

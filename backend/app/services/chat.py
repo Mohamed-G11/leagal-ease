@@ -1,14 +1,17 @@
 """One chat exchange: save the question, ask the RAG pipeline, save the answer or the error."""
 import logging
+import time
 
 from groq import GroqError
 from qdrant_client.http.exceptions import ApiException as QdrantApiException
 from sqlalchemy.orm import Session
 
+from app.analytics.tracker import log_query
 from app.core.errors import APIError
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
+from app.monitoring import chat_duration, chat_requests
 from app.schemas.chat import ChatOut
-from app.services.rag import rag_service
+from app.services.rag import rag_service, reranker_score
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +57,26 @@ def _to_api_error(exc: Exception) -> APIError:
     return APIError(500, "internal_error", "Internal server error.")
 
 
-def ask(db: Session, user_id: int, message: str, conversation_id: int | None, lang: str) -> ChatOut:
+def record_request(db: Session, **fields) -> None:
+    """Write the request log. A failure here must not cost the user their answer."""
+    try:
+        log_query(db, category=None, docs_found=0, **fields)
+    except Exception:
+        db.rollback()
+        logger.warning("Could not log the chat request", exc_info=True)
+
+
+def record_public_request(db: Session, question: str, lang: str, status: str, latency_ms: int) -> None:
+    """Anonymous visitors: no user id, IP address or anything else about who asked."""
+    record_request(
+        db, question=question, lang=lang, endpoint="public", status=status, answered=status == "answered",
+        latency_ms=latency_ms,
+    )
+
+
+def ask(
+    db: Session, user_id: int, message: str, conversation_id: int | None, lang: str, endpoint: str = "chat"
+) -> ChatOut:
     """Raises APIError when the pipeline cannot answer, after saving that failure.
 
     The error carries the conversation_id, so that a retry can continue the same conversation.
@@ -62,19 +84,38 @@ def ask(db: Session, user_id: int, message: str, conversation_id: int | None, la
     conv_id = get_or_create_conversation(db, user_id, conversation_id, message, lang).id
     save_message(db, conv_id, MessageRole.user, message)
 
+    reranker_score.set(None)
+    started = time.perf_counter()
     try:
-        answer = rag_service.ready_pipeline().answer(message)
+        with chat_duration.time():
+            answer = rag_service.ready_pipeline().answer(message)
     except Exception as exc:
+        chat_requests.labels(outcome="error").inc()
         error = _to_api_error(exc)
         if error is not exc:
             logger.exception("RAG pipeline failed in conversation %s", conv_id)
-        save_message(db, conv_id, MessageRole.assistant, error.detail, status="error", error_code=error.code)
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        message_id = save_message(
+            db, conv_id, MessageRole.assistant, error.detail, status="error", error_code=error.code
+        )
+        record_request(
+            db, question=message, lang=lang, user_id=user_id, endpoint=endpoint, answered=False,
+            status="error", error_code=error.code, citations_count=0, latency_ms=latency_ms,
+            message_id=message_id,
+        )
         details = {"conversation_id": conv_id}
         raise APIError(error.status_code, error.code, error.detail, details) from exc
 
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    chat_requests.labels(outcome=answer.status).inc()
     message_id = save_message(
         db, conv_id, MessageRole.assistant, answer.answer,
         status="abstained" if answer.status == "abstained" else "ok",
         citations=[c.model_dump() for c in answer.citations] or None,
+    )
+    record_request(
+        db, question=message, lang=answer.lang, user_id=user_id, endpoint=endpoint,
+        answered=answer.status == "answered", status=answer.status, citations_count=len(answer.citations),
+        latency_ms=latency_ms, reranker_score=reranker_score.get(), message_id=message_id,
     )
     return ChatOut(**answer.model_dump(), conversation_id=conv_id, message_id=message_id)

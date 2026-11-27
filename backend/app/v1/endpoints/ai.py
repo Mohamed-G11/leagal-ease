@@ -3,16 +3,20 @@
 import json
 import logging
 import re
+import time
 from typing import Literal
 
+import anyio
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
+from app.analytics.tracker import erase_conversation_text
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -20,7 +24,7 @@ from app.core.errors import ERROR_RESPONSES, APIError, ErrorResponse
 from app.models.chat import ChatConversation
 from app.models.user import User
 from app.schemas.chat import MAX_MESSAGE_LENGTH, ChatOut
-from app.services.chat import ask
+from app.services.chat import ask, record_public_request
 
 logger = logging.getLogger(__name__)
 
@@ -296,20 +300,49 @@ async def stream_groq(client: httpx.AsyncClient, resp: httpx.Response):
 # ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+async def logged_stream(stream, log):
+    """Pass the events through, then log how the exchange ended.
+
+    Anything that stops before [DONE] (Groq failure, visitor leaving) counts as an error.
+    """
+    status = "error"
+    try:
+        async for event in stream:
+            if event == "data: [DONE]\n\n":
+                status = "answered"
+            yield event
+    finally:
+        with anyio.CancelScope(shield=True):  # a disconnect cancels the request: still write the row
+            await log(status)
+
+
 @router.post(
     "/chat/public",
     responses={status: ERROR_RESPONSES.get(status, {"model": ErrorResponse}) for status in (422, 429, 502, 503)},
 )
 @limiter.limit(PUBLIC_RATE_LIMIT)
-async def chat_public(request: Request, req: PublicChatRequest):
+async def chat_public(request: Request, req: PublicChatRequest, db: Session = Depends(get_db)):
     """No auth — Home page welcome bot."""
     messages = [{"role": "system", "content": PUBLIC_PROMPT}]
     for m in (req.history or [])[-6:]:
         messages.append({"role": m.role, "content": m.content[:MAX_MESSAGE_LENGTH]})
     messages.append({"role": "user", "content": req.message})
 
+    started = time.perf_counter()
+
+    async def log(status: str) -> None:
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        lang = detect_language(req.message)
+        await run_in_threadpool(record_public_request, db, req.message, lang, status, latency_ms)
+
+    try:
+        stream = await open_groq_stream(messages, get_groq_key())
+    except Exception:
+        await log("error")
+        raise
+
     return StreamingResponse(
-        await open_groq_stream(messages, get_groq_key()),
+        logged_stream(stream, log),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -348,7 +381,7 @@ def chat_stream(
     """
     lang = req.lang if req.lang and req.lang != "auto" else detect_language(req.message)
     # Runs before the response starts, so failures are ordinary JSON errors.
-    result = ask(db, current_user.id, req.message, req.conversation_id, lang)
+    result = ask(db, current_user.id, req.message, req.conversation_id, lang, endpoint="stream")
 
     return StreamingResponse(
         answer_events(result),
@@ -428,6 +461,7 @@ async def delete_conversation(
     ).first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    erase_conversation_text(db, conv.id, current_user.id)  # before the delete, which unlinks the messages
     db.delete(conv)
     db.commit()
     return {"message": "Conversation deleted"}

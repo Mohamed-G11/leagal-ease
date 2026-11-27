@@ -63,9 +63,10 @@ jobs:
       - name: Test
         run: pytest -rs
 
-      - name: Migrations on PostgreSQL (upgrade, downgrade, upgrade)
+      - name: Migrations on PostgreSQL (upgrade, downgrade, upgrade, no model drift)
         working-directory: backend
         run: |
           alembic upgrade head
           alembic downgrade -1
           alembic upgrade head
+          alembic check

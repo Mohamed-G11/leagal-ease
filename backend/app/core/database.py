@@ -8,7 +8,7 @@ from app.core.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,   # optionnel, utile pour les connexions longues
-    echo=True             # affiche les requêtes SQL (à désactiver en prod)
+    hide_parameters=True, # keeps query values (question text, ...) out of error messages and logs
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

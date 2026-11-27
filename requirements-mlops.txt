@@ -1,0 +1,8 @@
+# Offline MLOps tools: Prefect flows (Wiem), RAGAS and Evidently (Hend).
+# Not installed in CI or in the API image. Installs the runtime dependencies too.
+#   pip install -r requirements-mlops.txt
+-r requirements.txt
+
+prefect==3.9.5
+ragas==0.4.4
+evidently==0.7.23

@@ -6,7 +6,8 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 # --- API ---
-fastapi==0.165.0
+# Held below 0.151: Prefect (requirements-mlops.txt) needs it.
+fastapi==0.150.0
 uvicorn[standard]==0.54.0
 python-multipart==0.0.34
 slowapi==0.1.10
@@ -46,3 +47,10 @@ torch==2.15.0
 # --- Experiments ---
 pyyaml==6.0.4
 mlflow==3.18.0
+# Not imported directly. Held below 3: Evidently (requirements-mlops.txt) fails to import with pandas 3.
+pandas==2.3.3
+
+# --- Agents, metrics and tracing (used by the API) ---
+langgraph==1.2.24
+prometheus-fastapi-instrumentator==8.1.0
+langfuse==5.2.0

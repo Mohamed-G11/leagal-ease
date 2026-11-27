@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.analytics import AIFeedback
+from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.models.user import User
 
 router = APIRouter(prefix="/ai/feedback", tags=["AI Feedback"])
@@ -19,6 +20,27 @@ class FeedbackRequest(BaseModel):
     answer:          str | None  = None
     conversation_id: int | None  = None
     message_index:   int | None  = None
+    message_id:      int | None  = None
+
+
+def rated_message_id(db: Session, user_id: int, req: FeedbackRequest) -> int | None:
+    """The assistant message being rated, only if it belongs to this user.
+
+    The chat widget sends no message_id yet, so the answer is also looked up by its text in the conversation.
+    """
+    query = (
+        db.query(ChatMessage.id)
+        .join(ChatConversation)
+        .filter(ChatConversation.user_id == user_id, ChatMessage.role == MessageRole.assistant)
+    )
+    if req.message_id is not None:
+        query = query.filter(ChatMessage.id == req.message_id)
+    elif req.conversation_id is not None and req.answer:
+        query = query.filter(ChatConversation.id == req.conversation_id, ChatMessage.content == req.answer)
+    else:
+        return None
+    row = query.order_by(ChatMessage.id.desc()).first()
+    return row.id if row else None
 
 
 @router.post("")
@@ -39,6 +61,7 @@ async def submit_feedback(
         question        = req.question[:500] if req.question else None,
         answer          = req.answer[:1000]  if req.answer  else None,
         rating          = req.rating,
+        message_id      = rated_message_id(db, current_user.id, req),
     )
     db.add(feedback)
     db.commit()
