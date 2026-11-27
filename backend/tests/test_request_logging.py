@@ -190,6 +190,10 @@ def test_sql_statements_are_not_echoed():
     assert not engine.echo  # echo prints parameters, including question text
 
 
+def test_database_errors_hide_query_parameters():
+    assert engine.hide_parameters
+
+
 def test_reranker_score_is_not_shared_between_concurrent_requests():
     scores = {"a": 0.9, "b": 0.1}
 
