@@ -88,6 +88,15 @@ network cannot reach them.
   time and is not copied into the image.
 - To run the API from source instead, start only the services: `docker compose up -d postgres qdrant`.
 
+### Published image
+
+Every push to `main` builds the API image and publishes it to GitHub Container Registry (`.github/workflows/cd.yml`),
+tagged with the full commit SHA and `latest`. Nothing is deployed.
+
+```bash
+docker pull ghcr.io/mohamed-g11/leagal-ease-api:latest
+```
+
 ## Checks
 
 ```bash
