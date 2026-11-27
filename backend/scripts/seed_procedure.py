@@ -11,6 +11,9 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.core.database import Base, SessionLocal, engine
+
+# Every model module: User's relationships name classes from the others, and create_all needs every table.
+from app.models import analytics, chat, collaboration  # noqa: F401
 from app.models.procedure import ProcedureStep, ProcedureType  # noqa: F401
 from app.models.user import User  # noqa: F401
 

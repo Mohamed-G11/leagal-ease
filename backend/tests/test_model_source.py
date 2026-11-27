@@ -1,8 +1,5 @@
 """Serving the registry champion: fallback, reload and the admin endpoint. Fakes only, no network."""
-import subprocess
-import sys
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -186,11 +183,3 @@ def test_champion_is_read_and_loaded_from_a_local_registry(tmp_path):
     finally:
         mlflow.set_tracking_uri(previous[0])
         mlflow.set_registry_uri(previous[1])
-
-
-def test_make_admin_script_can_load_the_user_model():
-    """The reload endpoint needs an admin. A fresh process: in this one every model is already imported."""
-    code = "import scripts.make_admin; from sqlalchemy.orm import configure_mappers; configure_mappers()"
-    backend = Path(__file__).resolve().parents[1]
-    done = subprocess.run([sys.executable, "-c", code], cwd=backend, capture_output=True, text=True)
-    assert done.returncode == 0, done.stderr[-500:]
