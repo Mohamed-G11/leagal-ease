@@ -36,7 +36,7 @@ def db():
 
 
 def use_pipeline(monkeypatch, result):
-    def answer(question, filters=None):
+    def answer(question, filters=None, history=None):
         if isinstance(result, Exception):
             raise result
         return result

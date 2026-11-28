@@ -19,6 +19,7 @@ def chat(req: ChatIn, current_user: User = Depends(get_current_user), db: Sessio
     """Answers from the indexed Tunisian legal documents, with citations.
 
     `status` is `abstained` when the documents do not contain the answer. Every exchange is saved,
-    including failures. Each question is answered on its own: earlier messages are not sent to the model.
+    including failures. The last messages of the conversation are given to the model as context
+    (without failed exchanges).
     """
     return ask(db, current_user.id, req.message, req.conversation_id, detect_language(req.message))

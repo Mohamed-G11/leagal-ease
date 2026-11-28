@@ -17,10 +17,9 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# What the retriever returned for the current request. Answer carries neither scores nor source numbers,
-# so both are read here. Context variables: concurrent requests do not see each other's values.
-reranker_score: ContextVar[float | None] = ContextVar("reranker_score", default=None)
-retrieved_ids: ContextVar[tuple[str, ...]] = ContextVar("retrieved_ids", default=())
+# The chunks retrieved for the current request, in order. Answer carries neither their texts nor the source
+# numbers. A context variable: concurrent requests do not see each other's value.
+retrieved_chunks: ContextVar[tuple] = ContextVar("retrieved_chunks", default=())  # of ScoredChunk
 
 
 class RagService:
@@ -91,30 +90,27 @@ class RagService:
             logger.exception("RAG pipeline failed to load from %s", self.config_path)
 
     def _serve(self, pipeline, cfg, source: str, version: str | None) -> None:
-        self._observe_retrieval(pipeline, cfg)  # both before requests can see this pipeline
+        self._observe_retrieval(pipeline)  # both before requests can see this pipeline
         tracing.instrument(pipeline)
         self.cfg, self.pipeline, self._probe = cfg, pipeline, None
         self.source, self.version, self.state = source, version, "ready"
         logger.info("RAG pipeline ready (%s from the %s, version %s)", getattr(cfg, "name", "?"), source, version)
 
     @staticmethod
-    def _observe_retrieval(pipeline, cfg) -> None:
-        """Wrap retrieve() to remember the chunk order and, with a reranker, the best score.
+    def _observe_retrieval(pipeline) -> None:
+        """Wrap the retrieval calls to remember which chunks the generator receives.
 
-        The generator numbers its sources in this order, so it gives the [n] of each citation.
-        Scores are kept only with a reranker: without one they mean something else.
+        It numbers its sources in this order, which gives the [n] of each citation, and the chunk texts
+        are what the quotes are checked against.
         """
         retriever = getattr(pipeline, "retriever", None)
         if retriever is None:
-            return  # citations then have no number
-        has_reranker = getattr(getattr(cfg, "reranker", None), "enabled", False)
+            return  # citations then have no number and are not checked
         retrieve = retriever.retrieve
 
         def retrieve_and_record(*args, **kwargs):
             chunks = retrieve(*args, **kwargs)
-            retrieved_ids.set(tuple(sc.chunk.chunk_id for sc in chunks))
-            if has_reranker:
-                reranker_score.set(max((sc.score for sc in chunks), default=None))
+            retrieved_chunks.set(tuple(chunks))
             return chunks
 
         retriever.retrieve = retrieve_and_record
@@ -125,9 +121,7 @@ class RagService:
 
             def retrieve_meta_and_record(*args, **kwargs):
                 result = retrieve_meta(*args, **kwargs)
-                retrieved_ids.set(tuple(sc.chunk.chunk_id for sc in result.chunks))
-                if has_reranker:
-                    reranker_score.set(result.top_score)
+                retrieved_chunks.set(tuple(result.chunks))
                 return result
 
             retriever.retrieve_with_meta = retrieve_meta_and_record
