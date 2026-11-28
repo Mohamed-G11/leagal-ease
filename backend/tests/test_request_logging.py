@@ -14,12 +14,12 @@ from app.analytics.tracker import get_overview, get_unanswered_queries
 from app.core.database import Base, engine, get_db
 from app.core.dependencies import get_current_user
 from app.core.errors import register_error_handlers
-from app.core.schemas import Answer, Citation
+from app.core.schemas import Answer, Chunk, Citation, ScoredChunk
 
 # Import every model module so that relationships resolve.
 from app.models import analytics, chat, collaboration, procedure, user  # noqa: F401
 from app.services import chat as chat_service
-from app.services.rag import RagService, rag_service, reranker_score, retrieved_ids
+from app.services.rag import RagService, rag_service, retrieved_chunks
 from app.v1.endpoints import ai, feedback
 from app.v1.endpoints import chat as chat_endpoint
 
@@ -46,11 +46,10 @@ def env(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1)
 
     def use(result, score=None):
-        def answer(question, filters=None):
-            reranker_score.set(score)
+        def answer(question, filters=None, history=None):
             if isinstance(result, Exception):
                 raise result
-            return result
+            return result.model_copy(update={"retrieval_score": score})
 
         monkeypatch.setattr(rag_service, "ready_pipeline", lambda: SimpleNamespace(answer=answer))
 
@@ -90,10 +89,10 @@ def test_abstained_and_failed_requests_are_logged(env):
     assert failed.message_id == env.rows(chat.ChatMessage)[-1].id
 
 
-def test_score_of_a_previous_request_is_not_reused(env):
+def test_each_request_logs_its_own_score(env):
     env.use(ANSWERED, score=0.8)
     env.client.post("/api/v1/chat", json=QUESTION)
-    env.use(ANSWERED)  # this pipeline reports no score
+    env.use(ANSWERED)  # E1: no reranker, no score
     env.client.post("/api/v1/chat", json=QUESTION)
     assert [log.reranker_score for log in logs(env)] == [0.8, None]
 
@@ -208,54 +207,37 @@ def test_database_errors_hide_query_parameters():
     assert engine.hide_parameters
 
 
-def scored(chunk_id, score):
-    return SimpleNamespace(score=score, chunk=SimpleNamespace(chunk_id=chunk_id))
+def scored(chunk_id, score, text="texte"):
+    chunk = Chunk(chunk_id=chunk_id, doc_id="d", doc_title="Loi", page=1, lang="fr", text=text)
+    return ScoredChunk(chunk=chunk, score=score)
 
 
-def test_reranker_score_is_not_shared_between_concurrent_requests():
-    scores = {"a": 0.9, "b": 0.1}
-
+def test_retrieved_chunks_are_not_shared_between_concurrent_requests():
     def retrieve(query, k=None, filters=None):
-        return [scored(query, scores[query])]
+        return [scored(query, 0.5)]
 
     service = RagService("unused.yaml")
     service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
+    service._observe_retrieval(service.pipeline)
     both_retrieved = threading.Barrier(2, timeout=5)
 
     def request(query):
         service.pipeline.retriever.retrieve(query)
         both_retrieved.wait()  # read only after both requests have written
-        return reranker_score.get(), retrieved_ids.get()
+        return [sc.chunk.chunk_id for sc in retrieved_chunks.get()]
 
     with ThreadPoolExecutor(2) as pool:
-        assert list(pool.map(request, "ab")) == [(0.9, ("a",)), (0.1, ("b",))]
+        assert list(pool.map(request, "ab")) == [["a"], ["b"]]
 
 
-def test_reranker_score_is_captured_from_the_retriever():
+def test_retrieved_chunks_are_recorded_from_the_retriever():
     chunks = [scored("c1", 0.7), scored("c2", 0.2)]
     retriever = SimpleNamespace(retrieve=lambda query, k=None, filters=None: chunks)
-    service = RagService("unused.yaml")
-    service.pipeline = SimpleNamespace(retriever=retriever)
-    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=True)))
+    RagService._observe_retrieval(SimpleNamespace(retriever=retriever))
 
-    reranker_score.set(None)
-    assert service.pipeline.retriever.retrieve("q", k=2) == chunks
-    assert reranker_score.get() == 0.7 and retrieved_ids.get() == ("c1", "c2")
-
-
-def test_scores_are_ignored_without_a_reranker():
-    def retrieve(query, k=None, filters=None):
-        return [scored("c1", 0.7)]
-
-    service = RagService("unused.yaml")
-    service.pipeline = SimpleNamespace(retriever=SimpleNamespace(retrieve=retrieve))
-    service._observe_retrieval(service.pipeline, SimpleNamespace(reranker=SimpleNamespace(enabled=False)))
-
-    reranker_score.set(None)
-    service.pipeline.retriever.retrieve("q")
-    assert reranker_score.get() is None  # RRF or cosine scores are not reranker scores
-    assert retrieved_ids.get() == ("c1",)
+    retrieved_chunks.set(())
+    assert retriever.retrieve("q", k=2) == chunks
+    assert retrieved_chunks.get() == tuple(chunks)
 
 
 def test_citations_are_numbered_like_the_answer_markers_and_kept_in_history(env, monkeypatch):
@@ -267,8 +249,8 @@ def test_citations_are_numbered_like_the_answer_markers_and_kept_in_history(env,
         status="answered", lang="fr", confidence=0.8,
     )
 
-    def run(question, filters=None):
-        retrieved_ids.set(("c1", "c2", "c3"))  # what the wrapped retriever records
+    def run(question, filters=None, history=None):
+        retrieved_chunks.set(tuple(scored(i, 0.5) for i in ("c1", "c2", "c3")))  # what the wrapper records
         return answer
 
     monkeypatch.setattr(rag_service, "ready_pipeline", lambda: SimpleNamespace(answer=run))
@@ -282,5 +264,5 @@ def test_citations_are_numbered_like_the_answer_markers_and_kept_in_history(env,
 
 
 def test_numbers_of_a_previous_request_are_not_reused(env):
-    retrieved_ids.set(("c1",))
+    retrieved_chunks.set((scored("c1", 0.5),))
     assert env.client.post("/api/v1/chat", json=QUESTION).json()["citations"][0]["number"] is None

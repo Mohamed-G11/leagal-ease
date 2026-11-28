@@ -328,7 +328,7 @@ export default function AIChatWidget() {
           </div>
           <div className="aip-hr">
             {msgs.length > 0 && <button className="aip-tbtn" onClick={newConv}>New</button>}
-            {msgs.length > 0 && <button className="aip-tbtn" onClick={() => setMsgs([])}>Clear</button>}
+            {msgs.length > 0 && <button className="aip-tbtn" onClick={newConv}>Clear</button>}
             <button className="aip-x" onClick={() => setOpen(false)}>
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>

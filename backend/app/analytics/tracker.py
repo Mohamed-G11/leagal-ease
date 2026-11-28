@@ -18,7 +18,8 @@ def log_query(
     answered: bool,
     user_id: int | None = None,
     endpoint: str = "stream",
-    **details,  # status, error_code, citations_count, latency_ms, reranker_score, message_id
+    **details,  # status, error_code, citations_count, verified_citations_count, latency_ms, reranker_score,
+    #             message_id
 ) -> None:
     """Log every AI query to DB for analytics."""
     entry = AIQueryLog(
@@ -133,6 +134,7 @@ def get_recent_queries(db: Session, limit: int = 20) -> list:
             "status":          r.status,
             "error_code":      r.error_code,
             "citations_count": r.citations_count,
+            "verified_citations_count": r.verified_citations_count,
             "latency_ms":      r.latency_ms,
             "reranker_score":  r.reranker_score,
             "message_id":      r.message_id,

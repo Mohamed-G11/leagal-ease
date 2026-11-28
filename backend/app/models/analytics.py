@@ -19,6 +19,7 @@ class AIQueryLog(Base):
     status          = Column(String(16), nullable=True)   # answered | abstained | error
     error_code      = Column(String(32), nullable=True)
     citations_count = Column(Integer, nullable=True)
+    verified_citations_count = Column(Integer, nullable=True)  # quotes found in the cited chunk
     latency_ms      = Column(Integer, nullable=True)      # time spent in the RAG pipeline
     reranker_score  = Column(Float, nullable=True)        # best chunk, only when a reranker is configured
     message_id      = Column(Integer,                     # the saved assistant message

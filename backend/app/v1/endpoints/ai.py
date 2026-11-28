@@ -396,7 +396,7 @@ def chat_stream(
     """Same as `POST /api/v1/chat`, as server-sent events for the chat widget.
 
     The pipeline does not stream, so the events are sent once the whole answer is ready.
-    `history` is accepted but not used.
+    `history` is accepted but ignored: the conversation's saved messages are used.
     """
     lang = req.lang if req.lang and req.lang != "auto" else detect_language(req.message)
     # Runs before the response starts, so failures are ordinary JSON errors.

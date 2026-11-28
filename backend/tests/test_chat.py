@@ -48,7 +48,7 @@ def env(monkeypatch):
 
     def use(result):
         """Make the pipeline return `result`, or raise it."""
-        def answer(question, filters=None):
+        def answer(question, filters=None, history=None):
             if isinstance(result, Exception):
                 raise result
             return result

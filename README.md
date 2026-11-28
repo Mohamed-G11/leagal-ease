@@ -124,7 +124,7 @@ Everything is read from `.env` at run time; it is never committed or copied into
 | `MLFLOW_TRACKING_USERNAME`, `MLFLOW_TRACKING_PASSWORD` | with the registry | DagsHub user name and access token |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | no | Tracing is on only when both are set |
 | `LANGFUSE_BASE_URL` | no | Langfuse region or server shown with your keys |
-| `LANGFUSE_CAPTURE_TEXT` | no | `true` also sends question and answer text to Langfuse |
+| `LANGFUSE_CAPTURE_TEXT` | no | `true` also sends question, answer and prompt text to Langfuse |
 | `GRAFANA_ADMIN_PASSWORD` | for Grafana | Password of the `admin` user, stored at Grafana's first start |
 | `FRONTEND_PORT` | no | Host port of the web app, default 5173 |
 | `VITE_API_URL` | no | API address for the frontend when it is built from source (see Known limitations) |
@@ -139,8 +139,10 @@ Swagger UI is at `http://localhost:8000/docs`. The chat endpoints need a login t
 - `POST /api/v1/ai/feedback` rates an answer: send `rating` (`up` or `down`) and the `message_id` of the answer.
 - `POST /api/v1/ai/chat/public` is the welcome bot: no login, 10 requests per minute per address.
 
-Each question is answered on its own: the conversation is saved but not sent to the model. Until the pipeline and
-the index are ready, the chat returns HTTP 503.
+Follow-up questions work within a conversation: its last messages (`llm.max_history_messages` in the served config,
+6 by default) are sent to the model as context, without failed exchanges and without the `[n]` markers of past
+answers. Facts must still come from the retrieved sources. The `history` field of the stream endpoint is ignored.
+Until the pipeline and the index are ready, the chat returns HTTP 503.
 
 ### Which model is served
 
@@ -185,13 +187,15 @@ token counts), plus status, number of citations, message id and served model. Co
 in your Langfuse project. The public bot is traced as `chat_public` with status, duration and token counts only.
 A Langfuse failure never fails a chat request.
 
-**Text is not sent by default.** `LANGFUSE_CAPTURE_TEXT=true` adds question, prompt and answer (never for the public
-bot). Deleting a conversation in the app does **not** erase it from Langfuse.
+**Text is not sent by default.** `LANGFUSE_CAPTURE_TEXT=true` adds question, answer and prompt, which includes the
+earlier messages of the conversation (never for the public bot). Deleting a conversation in the app does **not**
+erase it from Langfuse.
 
 ### Request log and privacy
 
-Every chat request writes one row in `ai_query_logs` (question, language, status, latency, citations, reranker score,
-`message_id`). Feedback rows in `ai_feedback` carry the same `message_id`:
+Every chat request writes one row in `ai_query_logs`: question, language, status, latency, citations, verified
+citations (quotes found in the cited passage), reranker score (E2 and later) and `message_id`. Feedback rows in
+`ai_feedback` carry the same `message_id`:
 
 ```sql
 SELECT l.question, l.status, l.latency_ms, f.rating
@@ -296,15 +300,19 @@ Component notes: [E0](docs/README_E0.md), [E1](docs/README_E1.md), [E2](docs/REA
 - The answer's `[n]` markers are not part of the shared `Citation` schema. The API derives each citation's number from
   the order of the retrieved chunks, which holds for the current pipeline; a pipeline that retrieves differently
   (such as a future E3) would give citations without a number, and the widget then removes the markers.
-- No pipeline computes a confidence score yet, so the widget shows "Confidence: not provided".
-- Conversation history is not sent to the model, so follow-up questions lack context.
+- The confidence shown measures whether the quotes are found in the cited passages, not whether those passages
+  answer the question: a wrong answer can show 100%. It is an indicator, not a probability.
+- `verified_citations_count` and the confidence can overstate: when the model gives no quote, `parse_answer` uses the
+  first 200 characters of the chunk, which always matches. Reported to its author.
+- With E1 (the default), a follow-up question is searched as typed ("and for an SARL?"), so retrieval may miss; only
+  E2 rewrites it using the conversation.
+- A short French follow-up question can be answered in English: the language is guessed from the question alone.
+  Reported to Wiem.
 - Documents can state different durations for related rules (for example the Startup label); the answer then depends
   on which passage is retrieved. Check the cited source.
 - The public welcome bot is not grounded in the documents.
 
 **E2 (advanced retrieval)**
-- The detected language is kept on the shared retriever (`last_lang`), so two simultaneous questions can swap answer
-  languages. Reported to its author.
 - The reranker is slow on CPU.
 
 **Privacy and security**
