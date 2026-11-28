@@ -60,6 +60,38 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # MCP tools over streamable HTTP. Off by default: docker compose --profile mcp up -d --build mcp
+  # It loads its own copy of the embedding model, and has no login: keep it on 127.0.0.1.
+  mcp:
+    profiles: [mcp]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: legalease-api:local
+    container_name: legalease-mcp
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg2://@postgres:5432/${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+    command: python scripts/run_mcp.py --http --host 0.0.0.0 --port 8001
+    ports:
+      - "127.0.0.1:8001:8001" # local only
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck: # the image's check asks the API on port 8000
+      test: [ "CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 3)" ]
+      interval: 30s
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend  # the browser calls the API at http://127.0.0.1:8000

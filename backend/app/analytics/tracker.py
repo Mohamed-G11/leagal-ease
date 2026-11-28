@@ -36,8 +36,10 @@ def log_query(
     db.commit()
 
 
-# /chat/public rows: "answered" only means Groq replied, not that the documents held an answer.
-NOT_PUBLIC = AIQueryLog.endpoint.is_distinct_from("public")
+# Anonymous rows. /chat/public: "answered" only means Groq replied, not that the documents held an answer.
+# MCP: a client program asks, often with its own search queries, not a user of the app.
+ANONYMOUS_ENDPOINTS = ("public", "mcp_search", "mcp_ask")
+IDENTIFIED = func.coalesce(AIQueryLog.endpoint, "").not_in(ANONYMOUS_ENDPOINTS)
 
 
 def erase_conversation_text(db: Session, conversation_id: int, user_id: int) -> None:
@@ -59,12 +61,12 @@ def erase_conversation_text(db: Session, conversation_id: int, user_id: int) -> 
 def get_overview(db: Session) -> dict:
     """General stats — adapted from colleague's get_overview().
 
-    total_queries counts every row; the answered figures and the rate leave out /chat/public.
+    total_queries counts every row; the answered figures and the rate leave out /chat/public and MCP.
     """
     total    = db.query(func.count(AIQueryLog.id)).scalar() or 0
-    rated    = db.query(func.count(AIQueryLog.id)).filter(NOT_PUBLIC).scalar() or 0
+    rated    = db.query(func.count(AIQueryLog.id)).filter(IDENTIFIED).scalar() or 0
     answered = (
-        db.query(func.count(AIQueryLog.id)).filter(NOT_PUBLIC, AIQueryLog.answered.is_(True)).scalar() or 0
+        db.query(func.count(AIQueryLog.id)).filter(IDENTIFIED, AIQueryLog.answered.is_(True)).scalar() or 0
     )
 
     return {
@@ -148,7 +150,7 @@ def get_unanswered_queries(db: Session, limit: int = 20) -> list:
     """Queries the RAG couldn't answer — useful to detect dataset gaps."""
     rows = (
         db.query(AIQueryLog)
-        .filter(NOT_PUBLIC, AIQueryLog.answered.is_(False), AIQueryLog.question != "")  # "" = erased by the user
+        .filter(IDENTIFIED, AIQueryLog.answered.is_(False), AIQueryLog.question != "")  # "" = erased by the user
         .order_by(desc(AIQueryLog.created_at))
         .limit(limit)
         .all()
