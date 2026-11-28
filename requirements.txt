@@ -54,3 +54,4 @@ pandas==2.3.3
 langgraph==1.2.24
 prometheus-fastapi-instrumentator==8.1.0
 langfuse==5.2.0
+mcp==2.3.0  # MCP server (app/mcp_server.py). 2.x: FastMCP is now MCPServer

@@ -17,6 +17,7 @@ University capstone project, AI Engineering course.
   answers visitors who have no account.
 - **Procedure tracking:** step-by-step timelines, deadlines and reminders, document uploads, teammates, admin pages.
 - **Model registry:** the API serves the `champion` pipeline from MLflow and switches without a redeploy.
+- **MCP server:** the corpus as tools for any MCP client (demo with the MCP Inspector).
 - **Operations:** request log, user feedback, Prometheus metrics, Grafana dashboard, Langfuse traces, CI and image
   publishing.
 
@@ -162,6 +163,124 @@ curl -X POST http://localhost:8000/api/v1/admin/rag/reload -H "Authorization: Be
 - The API runs its own `app` code, so a new version changes the experiment config, not the code.
 - The new version's collection must already be indexed in Qdrant.
 
+## MCP server
+
+The corpus is also available as [Model Context Protocol](https://modelcontextprotocol.io) tools, for the MCP
+Inspector or any MCP client.
+
+| Tool | Returns | Limits | Calls Groq |
+|---|---|---|---|
+| `search_legal_texts(query, k, lang?)` | passages with document, page and score | `k` 1–10, query ≤ 1000 characters | E2 only |
+| `ask_legal_question(question)` | answer, cited sources, confidence | ≤ 4000 characters, 10 per minute | yes |
+| `get_document_page(doc_id, page)` | the indexed passages of one page | one page per call | no |
+| `list_documents()` | documents with ids, languages and page counts | none | no |
+
+With E1 (the default) `score` is a reciprocal rank fusion score: it ranks passages and is not a similarity.
+`lang` is `fr`, `ar` or `en`.
+
+The server loads its own pipeline, like the API (registry champion, else `RAG_CONFIG`), so it uses its own memory
+(about 900 MB) and does not need the API. It connects at once and loads the model in the background: until it is
+ready, tools answer "still loading, retry". A model switch (`/admin/rag/reload`) does not reach it: restart it.
+
+### Before you start
+
+- The project installed as in "Running from source", and `.env` filled in, with `QDRANT_URL=http://localhost:6333`
+  and `GROQ_API_KEY`. The server reads `.env` itself: **no client configuration needs a key.**
+- The **Qdrant server** with the index (`docker compose up -d qdrant postgres`). A local index is never used.
+- For the Inspector: Node.js 22.23.4+ or 24.22.1+.
+
+### Demo with the MCP Inspector
+
+**Over stdio** (the Inspector starts the server). From the repository root:
+
+```bash
+npx @modelcontextprotocol/inspector@2.17.0 .venv/Scripts/python.exe backend/scripts/run_mcp.py
+# Linux / macOS: .venv/bin/python
+```
+
+Open the address it prints, connect the server, open **Tools**, pick a tool, fill in its fields and press **Execute
+Tool**. In the first half minute or so the answer is "still loading": execute again.
+
+**Over streamable HTTP** (a compose service, off by default):
+
+```bash
+docker compose --profile mcp up -d --build mcp        # http://127.0.0.1:8001/mcp
+npx @modelcontextprotocol/inspector@2.17.0 --transport http --server-url http://127.0.0.1:8001/mcp
+```
+
+Or from the command line:
+
+```bash
+I="npx @modelcontextprotocol/inspector@2.17.0 --cli http://127.0.0.1:8001/mcp"
+$I --method tools/list
+$I --method tools/call --tool-name list_documents
+$I --method tools/call --tool-name search_legal_texts --tool-arg "query=durée du label Startup" k=3 lang=fr
+$I --method tools/call --tool-name get_document_page --tool-arg doc_id=article_la_startup_en_droit_tunisien page=2
+$I --method tools/call --tool-name ask_legal_question --tool-arg "question=Quelle est la durée du label Startup ?"
+```
+
+The command line only calls tools over HTTP: over stdio each command starts a new server, which is still loading.
+
+The HTTP service has **no login** and is bound to `127.0.0.1`. Do not expose it. Without Docker:
+`python backend/scripts/run_mcp.py --http`. Stop it with `docker compose --profile mcp stop mcp`.
+
+### Smoke test
+
+```bash
+python backend/scripts/mcp_client.py      # starts the server over stdio and calls each tool once
+```
+
+It exits with 1 if a tool fails. The test suite runs the same script against a fake server
+(`backend/tests/mcp_fake_server.py`), so CI needs no model, Groq or Qdrant.
+
+### LangChain and LangGraph
+
+The tools load with [`langchain-mcp-adapters`](https://github.com/langchain-ai/langchain-mcp-adapters), which is **not**
+a dependency of this project. Its 0.3.2 release needs `mcp<2` while the server uses `mcp` 2.x, so the client must have
+**its own virtual environment** (checked with 0.3.2, `mcp` 1.30.0, `langchain-core` 1.8.5):
+
+Until the team decides how E3 uses these tools: `langchain-mcp-adapters` 0.3.x requires `mcp<2`, so use a separate
+environment and connect over HTTP.
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+client = MultiServerMCPClient({"legalease": {"transport": "streamable_http", "url": "http://127.0.0.1:8001/mcp"}})
+
+async with client.session("legalease") as session:   # one session for the whole agent run
+    tools = await load_mcp_tools(session)
+```
+
+Use a session, especially over stdio: without one each tool call starts a new server and reloads the model. A tool
+that fails (for example "still loading") returns the error as its text.
+
+### Claude Desktop (optional)
+
+In `claude_desktop_config.json`, with absolute paths and no key:
+
+```json
+{
+  "mcpServers": {
+    "legalease": {
+      "command": "C:\\path\\to\\LegalEase-RAG\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\LegalEase-RAG\\backend\\scripts\\run_mcp.py"],
+      "cwd": "C:\\path\\to\\LegalEase-RAG"
+    }
+  }
+}
+```
+
+Restart Claude Desktop. This was not tested with Claude Desktop itself.
+
+### What is recorded
+
+`search_legal_texts` and `ask_legal_question` write a row in `ai_query_logs` (`endpoint` `mcp_search` or `mcp_ask`)
+with the question, language, status and latency, and nothing about who asked. These rows are left out of the admin
+answer rate and unanswered questions. If PostgreSQL is off or not migrated (`alembic upgrade head`), the tools still
+work and the server log says so. With Langfuse keys, timings and token counts are traced, **never the text**, whatever
+`LANGFUSE_CAPTURE_TEXT` says. MCP calls are not in the Prometheus metrics.
+
 ## Monitoring and observability
 
 ### Prometheus and Grafana
@@ -203,7 +322,7 @@ FROM ai_query_logs l LEFT JOIN ai_feedback f ON f.message_id = l.message_id;
 ```
 
 - The public bot logs question, language, status and latency only: no IP address or visitor identifier.
-- The admin answer rate and unanswered-questions list leave out public rows.
+- The admin answer rate and unanswered-questions list leave out public and MCP rows.
 - Deleting a conversation erases the question text from its log rows and the question and answer text from its
   feedback rows. Ratings and numeric fields stay.
 - SQL statements are not echoed, and database errors hide query parameters.
