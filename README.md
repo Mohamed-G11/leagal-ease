@@ -300,11 +300,14 @@ Component notes: [E0](docs/README_E0.md), [E1](docs/README_E1.md), [E2](docs/REA
 - The answer's `[n]` markers are not part of the shared `Citation` schema. The API derives each citation's number from
   the order of the retrieved chunks, which holds for the current pipeline; a pipeline that retrieves differently
   (such as a future E3) would give citations without a number, and the widget then removes the markers.
-- The confidence shown is an indicator of how well the quotes match the sources, not a probability.
+- The confidence shown measures whether the quotes are found in the cited passages, not whether those passages
+  answer the question: a wrong answer can show 100%. It is an indicator, not a probability.
 - `verified_citations_count` and the confidence can overstate: when the model gives no quote, `parse_answer` uses the
   first 200 characters of the chunk, which always matches. Reported to its author.
 - With E1 (the default), a follow-up question is searched as typed ("and for an SARL?"), so retrieval may miss; only
   E2 rewrites it using the conversation.
+- A short French follow-up question can be answered in English: the language is guessed from the question alone.
+  Reported to Wiem.
 - Documents can state different durations for related rules (for example the Startup label); the answer then depends
   on which passage is retrieved. Check the cited source.
 - The public welcome bot is not grounded in the documents.
