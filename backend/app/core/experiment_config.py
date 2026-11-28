@@ -40,6 +40,7 @@ class RetrievalConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
+    max_history_messages: int = 6  # previous messages given to the LLM (3 exchanges)
     provider: str = "groq"
     model: str = "openai/gpt-oss-120b"
     temperature: float = 0.0

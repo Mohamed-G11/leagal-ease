@@ -66,15 +66,18 @@ def test_advanced_retriever_end_to_end(setup):  # noqa: F811
                          transformer=QueryTransformer(cfg.query_transform, client=fake_llm),
                          reranker=Reranker(cfg.reranker, model=FakeCrossEncoder()))
     assert isinstance(retr, AdvancedRetriever) and isinstance(retr.base, HybridRetriever)
-    hits = retr.retrieve("9adech 3andi wa9t bech nsajel ?", k=2)
-    assert hits[0].chunk.page == 2  # found thanks to the French rewrite
-    assert len(hits) == 1  # page 1 dropped by compression
-    assert retr.last_lang == "darija" and len(retr.last_queries) == 2
+    res = retr.retrieve_with_meta("9adech 3andi wa9t bech nsajel ?", k=2)
+    assert res.chunks[0].chunk.page == 2  # found thanks to the French rewrite
+    assert len(res.chunks) == 1  # page 1 dropped by compression
+    assert res.lang == "darija" and len(res.queries) == 2 and 0 < res.top_score <= 1
+    assert retr.retrieve("9adech ?", k=2)[0].chunk.page == 2  # plain interface still works
+    assert retr.client is client  # health check of the API reads it
 
     gen = FakeGroq({"status": "answered", "answer": "Dix jours [1].",
                     "citations": [{"source": 1, "quote": "dix jours"}]})
     ans = RAGPipeline(cfg, retriever=retr, generator=Generator(cfg.llm, client=gen)).answer("9adech ?")
     assert ans.lang == "darija" and "Tunisian Darija" in gen.last_kwargs["messages"][0]["content"]
+    assert ans.retrieval_score is not None
 
 
 def test_disabled_bricks_return_base_retriever(setup):  # noqa: F811

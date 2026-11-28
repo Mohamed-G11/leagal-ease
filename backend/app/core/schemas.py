@@ -39,3 +39,29 @@ class Answer(BaseModel):
     status: Literal["answered", "abstained"]
     confidence: float | None = None
     lang: Lang
+    # best reranker probability of the chunks sent to the LLM (E2+ only, None otherwise)
+    retrieval_score: float | None = None
+
+
+class ChatTurn(BaseModel):
+    """One previous message of the conversation, passed by the API (oldest first)."""
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class RetrievalResult(BaseModel):
+    """What a retrieval call produced for ONE request. Returned, never stored on the retriever,
+    so concurrent requests sharing a pipeline cannot overwrite each other's language."""
+    chunks: list[ScoredChunk]
+    lang: Lang | None = None  # detected by the query transformer (E2), e.g. "darija"
+    queries: list[str] = Field(default_factory=list)
+    top_score: float | None = None  # best reranker probability (only meaningful with a reranker)
+
+
+def recent_history(history: list[ChatTurn] | list[dict] | None, max_messages: int,
+                   max_chars: int = 600) -> list[ChatTurn]:
+    """Keep the last messages only, each cut to max_chars, so the prompt size stays bounded."""
+    if not history or max_messages <= 0:
+        return []
+    turns = [h if isinstance(h, ChatTurn) else ChatTurn(**h) for h in history][-max_messages:]
+    return [ChatTurn(role=t.role, content=t.content[:max_chars]) for t in turns if t.content.strip()]

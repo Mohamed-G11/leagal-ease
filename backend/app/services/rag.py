@@ -119,6 +119,19 @@ class RagService:
 
         retriever.retrieve = retrieve_and_record
 
+        # E2+: the pipeline calls retrieve_with_meta() (it returns the detected language too)
+        if hasattr(retriever, "retrieve_with_meta"):
+            retrieve_meta = retriever.retrieve_with_meta
+
+            def retrieve_meta_and_record(*args, **kwargs):
+                result = retrieve_meta(*args, **kwargs)
+                retrieved_ids.set(tuple(sc.chunk.chunk_id for sc in result.chunks))
+                if has_reranker:
+                    reranker_score.set(result.top_score)
+                return result
+
+            retriever.retrieve_with_meta = retrieve_meta_and_record
+
     def _qdrant_client(self):
         if self.cfg is None:
             return None

@@ -97,10 +97,16 @@ def pdf_to_chunks(pdf_path: Path, cfg: ExperimentConfig, count: Callable[[str], 
     return chunks
 
 
-def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
+def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None, recreate: bool = False) -> int:
+    """Index the PDFs of pdf_dir.
+
+    recreate=False (default): create the collection if missing, otherwise upsert into it. Point ids
+    are deterministic, so re-ingesting a document overwrites its chunks instead of duplicating them.
+    recreate=True: drop the collection first (needed when the embedding model or chunking changes).
+    """
     from app.retrieval.embedder import get_embedder
     from app.retrieval.sparse import BM25Encoder
-    from app.retrieval.store import DENSE, SPARSE, get_client, point_id, recreate_collection
+    from app.retrieval.store import DENSE, SPARSE, ensure_collection, get_client, point_id
 
     embedder = embedder or get_embedder(cfg.embedding)
     pdfs = sorted(pdf_dir.glob("*.pdf"))
@@ -115,7 +121,9 @@ def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
 
     bm25 = BM25Encoder(**cfg.retrieval.bm25.model_dump())
     client = get_client(cfg.qdrant)
-    recreate_collection(client, cfg.qdrant.collection, embedder.dim)
+    status = ensure_collection(client, cfg.qdrant.collection, embedder.dim, recreate=recreate)
+    if status == "kept":
+        print(f"Collection '{cfg.qdrant.collection}' exists: upserting (use --recreate to rebuild it)")
 
     batch = 64
     for start in range(0, len(all_chunks), batch):
@@ -132,7 +140,7 @@ def ingest(pdf_dir: Path, cfg: ExperimentConfig, embedder=None) -> int:
                 for c, v in zip(part, vectors, strict=False)
             ],
         )
-    print(f"Indexed {len(all_chunks)} chunks from {len(pdfs)} PDFs into '{cfg.qdrant.collection}'")
+    print(f"Indexed {len(all_chunks)} chunks from {len(pdfs)} PDFs into '{cfg.qdrant.collection}' ({status})")
     return len(all_chunks)
 
 
@@ -140,5 +148,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pdf-dir", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=Path("../experiments/E0_naive_rag/config.yaml"))
+    parser.add_argument("--recreate", action="store_true",
+                        help="drop the collection first (needed after changing the embedding model or chunking)")
     args = parser.parse_args()
-    ingest(args.pdf_dir, load_config(args.config))
+    ingest(args.pdf_dir, load_config(args.config), recreate=args.recreate)
